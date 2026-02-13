@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Swipe Prototype</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent scrolling */
+            background-color: #1a1a1a;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none; /* Crucial: stops browser gestures */
+        }
+
+        #game-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            background-color: #333;
+            border: 2px solid #555;
+            border-radius: 10px;
+        }
+
+        #player {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background-color: #ff4757;
+            border-radius: 8px;
+            top: 125px; /* Center (300/2 - 50/2) */
+            left: 125px;
+            transition: all 0.2s ease-out; /* Smooth movement */
+            box-shadow: 0 0 15px rgba(255, 71, 87, 0.5);
+        }
+
+        #info {
+            position: absolute;
+            top: -40px;
+            width: 100%;
+            text-align: center;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="info">Swipe to move the square!</div>
+        <div id="player"></div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const container = document.getElementById('game-container');
+        const boundary = 250; // 300px container - 50px player
+        const minSwipeDist = 20; // Minimum swipe distance in px
+        const speedMultiplier = 0.3; // Scales speed into movement distance
+        const minMove = 20; // Minimum movement in px
+        const maxMove = 200; // Cap so it doesn't fly off
+
+        let startX, startY, startTime;
+        let currentPos = { x: 125, y: 125 };
+
+        // Touch events
+        window.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+            startTime = Date.now();
+        }, { passive: false });
+
+        window.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            const endX = e.changedTouches[0].clientX;
+            const endY = e.changedTouches[0].clientY;
+            const elapsed = Math.max(Date.now() - startTime, 10); // ms, avoid div by 0
+
+            const diffX = endX - startX;
+            const diffY = endY - startY;
+            const swipeDist = Math.sqrt(diffX * diffX + diffY * diffY);
+
+            if (swipeDist < minSwipeDist) return; // Too small, ignore
+
+            // Speed = pixels per millisecond
+            const speed = swipeDist / elapsed;
+
+            // Movement distance scales with speed
+            const moveDist = Math.min(maxMove, Math.max(minMove, speed * speedMultiplier * 200));
+
+            // Normalize direction so diagonal swipes work
+            const normX = diffX / swipeDist;
+            const normY = diffY / swipeDist;
+
+            // Apply movement in the swipe direction
+            currentPos.x = Math.max(0, Math.min(boundary, currentPos.x + normX * moveDist));
+            currentPos.y = Math.max(0, Math.min(boundary, currentPos.y + normY * moveDist));
+
+            updatePlayerPosition();
+        }, { passive: false });
+
+        // Mouse events for desktop testing
+        window.addEventListener('mousedown', (e) => {
+            startX = e.clientX;
+            startY = e.clientY;
+            startTime = Date.now();
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            const endX = e.clientX;
+            const endY = e.clientY;
+            const elapsed = Math.max(Date.now() - startTime, 10);
+
+            const diffX = endX - startX;
+            const diffY = endY - startY;
+            const swipeDist = Math.sqrt(diffX * diffX + diffY * diffY);
+
+            if (swipeDist < minSwipeDist) return;
+
+            const speed = swipeDist / elapsed;
+            const moveDist = Math.min(maxMove, Math.max(minMove, speed * speedMultiplier * 200));
+
+            const normX = diffX / swipeDist;
+            const normY = diffY / swipeDist;
+
+            currentPos.x = Math.max(0, Math.min(boundary, currentPos.x + normX * moveDist));
+            currentPos.y = Math.max(0, Math.min(boundary, currentPos.y + normY * moveDist));
+
+            updatePlayerPosition();
+        });
+
+        function updatePlayerPosition() {
+            player.style.left = currentPos.x + 'px';
+            player.style.top = currentPos.y + 'px';
+        }
+    </script>
+</body>
+</html>
