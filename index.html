@@ -1,1101 +1,373 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pocket Pickleball</title>
+    <title>Pocket Pickleball Pro 3D</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            background: #1a1a1a;
+            margin: 0;
             overflow: hidden;
-            touch-action: none;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+            background: #0a0a0a;
+            font-family: 'Outfit', sans-serif;
         }
-        #game-wrapper {
-            width: 100vw;
-            max-width: 430px;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            position: relative;
-        }
-        canvas {
-            display: block;
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 30px;
+            box-sizing: border-box;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 15px 30px;
+            color: white;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+
+        #score-board {
+            display: flex;
+            gap: 40px;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .score-unit {
+            text-align: center;
+        }
+
+        .score-label {
+            font-size: 12px;
+            opacity: 0.6;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        #message {
+            font-size: 64px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #message.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        #hint {
+            font-size: 18px;
+            opacity: 0.8;
+            transition: opacity 0.5s;
+        }
+
+        canvas {
+            display: block;
+            touch-action: none;
+            cursor: crosshair;
         }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
+
 <body>
-    <div id="game-wrapper">
-        <canvas id="game"></canvas>
+    <div id="ui">
+        <div id="score-board" class="glass">
+            <div class="score-unit">
+                <div class="score-label">Player</div>
+                <div id="player-score">0</div>
+            </div>
+            <div style="width: 1px; background: rgba(255,255,255,0.2);"></div>
+            <div class="score-unit">
+                <div class="score-label">Opponent</div>
+                <div id="opponent-score">0</div>
+            </div>
+        </div>
+
+        <div id="message">Ready?</div>
+
+        <div id="hint" class="glass">Move mouse/finger to control paddle</div>
     </div>
 
-    <script>
-        const canvas = document.getElementById('game');
-        const ctx = canvas.getContext('2d');
-        const wrapper = document.getElementById('game-wrapper');
-
-        function resize() {
-            const rect = wrapper.getBoundingClientRect();
-            canvas.width = rect.width * 2;
-            canvas.height = rect.height * 2;
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+            }
         }
-        resize();
-        window.addEventListener('resize', resize);
+    </script>
 
-        // --- Game State ---
-        const W = () => canvas.width;
-        const H = () => canvas.height;
+    <script type="module">
+        import * as THREE from 'three';
+        import * as CANNON from 'cannon-es';
 
-        const NET_Y_RATIO = 0.38;
-        const VANISH_Y_RATIO = 0.18;
+        // --- Config ---
+        const COURT_W = 6.1;
+        const COURT_L = 13.41;
+        const NET_H = 0.914;
+        const BALL_R = 0.038;
+        const PADDLE_W = 0.22;
+        const PADDLE_H = 0.38;
 
-        // Paddle — tracks finger position directly in canvas coords
-        let paddleCanvasX = 0; // actual canvas X
-        let paddleCanvasY = 0; // actual canvas Y
-        const PADDLE_PW = 70; // paddle width in canvas px
-        const PADDLE_PH = 60; // paddle height in canvas px
-        let paddleForward = 0; // 0-1, how far paddle has lunged forward during swing
-        let paddleVisible = false; // only show when finger is on screen
+        // --- Setup Scene ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1c2c);
+        scene.fog = new THREE.FogExp2(0x1a1c2c, 0.04);
 
-        // Opponent
-        let opponentX = 0.5;
-        let opponentTargetX = 0.5;
-        let opponentSwingPhase = 0;
+        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2.5, 9);
+        camera.lookAt(0, 0.8, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        document.body.appendChild(renderer.domElement);
+
+        // --- Physics ---
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0);
+        const ballMat = new CANNON.Material('ball');
+        const courtMat = new CANNON.Material('court');
+        const paddleMat = new CANNON.Material('paddle');
+        world.addContactMaterial(new CANNON.ContactMaterial(ballMat, courtMat, { friction: 0.1, restitution: 0.7 }));
+        world.addContactMaterial(new CANNON.ContactMaterial(ballMat, paddleMat, { friction: 0.4, restitution: 0.9 }));
+
+        // --- Lights ---
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambient);
+
+        const spot = new THREE.SpotLight(0xffffff, 100);
+        spot.position.set(5, 10, 5);
+        spot.angle = 0.5;
+        spot.penumbra = 0.5;
+        spot.castShadow = true;
+        spot.shadow.mapSize.width = 1024;
+        spot.shadow.mapSize.height = 1024;
+        scene.add(spot);
+
+        const point = new THREE.PointLight(0x4488ff, 50);
+        point.position.set(-5, 5, -5);
+        scene.add(point);
+
+        // --- Environment ---
+        // Floor
+        const floorGeo = new THREE.CircleGeometry(40, 32);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Court
+        const courtGroup = new THREE.Group();
+        const courtSurface = new THREE.Mesh(
+            new THREE.PlaneGeometry(COURT_W, COURT_L),
+            new THREE.MeshStandardMaterial({ color: 0x24628a, roughness: 0.9 })
+        );
+        courtSurface.rotation.x = -Math.PI / 2;
+        courtSurface.receiveShadow = true;
+        courtGroup.add(courtSurface);
+
+        // Lines (Simplified)
+        const lineGeo = new THREE.PlaneGeometry(COURT_W, 0.05);
+        const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const addLine = (w, h, x, z, rot = 0) => {
+            const l = new THREE.Mesh(new THREE.PlaneGeometry(w, h), lineMat);
+            l.rotation.x = -Math.PI / 2;
+            l.rotation.z = rot;
+            l.position.set(x, 0.005, z);
+            courtGroup.add(l);
+        };
+        addLine(COURT_W, 0.05, 0, COURT_L / 2);     // Baseline near
+        addLine(COURT_W, 0.05, 0, -COURT_L / 2);    // Baseline far
+        addLine(0.05, COURT_L, COURT_W / 2, 0);    // Sideline L
+        addLine(0.05, COURT_L, -COURT_W / 2, 0);   // Sideline R
+        addLine(COURT_W, 0.05, 0, 2.13);         // Kitchen near
+        addLine(COURT_W, 0.05, 0, -2.13);        // Kitchen far
+        addLine(0.05, COURT_L - 4.26, 0, 0);     // Mid line
+        scene.add(courtGroup);
+
+        const courtBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
+        courtBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+        world.addBody(courtBody);
+
+        // Net
+        const netGroup = new THREE.Group();
+        const netMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(COURT_W + 0.4, NET_H),
+            new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, wireframe: true })
+        );
+        netMesh.position.y = NET_H / 2;
+        netGroup.add(netMesh);
+        const tape = new THREE.Mesh(new THREE.BoxGeometry(COURT_W + 0.4, 0.06, 0.04), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+        tape.position.y = NET_H;
+        netGroup.add(tape);
+        scene.add(netGroup);
+        world.addBody(new CANNON.Body({ mass: 0, position: new CANNON.Vec3(0, NET_H / 2, 0), shape: new CANNON.Box(new CANNON.Vec3(COURT_W / 2, NET_H / 2, 0.02)) }));
 
         // Ball
-        let ball = null;
-        const BALL_SPEED_INCOMING = 0.012;
-        const BALL_SPEED_RETURNING = 0.014;
-
-        // Swipe tracking
-        let swipeStartX = 0;
-        let swipeStartY = 0;
-        let swipeStartTime = 0;
-        let isSwiping = false;
-        let lastSwipeSpeed = 0; // for UI feedback
-
-        // Score
-        let playerScore = 0;
-        let opponentScore = 0;
-        let message = '';
-        let messageTimer = 0;
-        let messageColor = '#fff';
-
-        // State machine
-        let gameState = 'waiting';
-        let stateTimer = 0;
-
-        // Swipe trail for visual feedback
-        let swipeTrail = [];
-
-        // Net hit animation
-        let netHitAnim = 0;
-
-        // --- Drawing ---
-        function drawCourt() {
-            const w = W(), h = H();
-            const vanishY = h * VANISH_Y_RATIO;
-            const netY = h * NET_Y_RATIO;
-
-            // Sky gradient
-            const skyGrad = ctx.createLinearGradient(0, 0, 0, vanishY + 20);
-            skyGrad.addColorStop(0, '#5da0d4');
-            skyGrad.addColorStop(0.6, '#87CEEB');
-            skyGrad.addColorStop(1, '#b8ddf0');
-            ctx.fillStyle = skyGrad;
-            ctx.fillRect(0, 0, w, vanishY + 20);
-
-            // Distant tree line / fence hint
-            ctx.fillStyle = '#4a8a5a';
-            ctx.fillRect(0, vanishY - 12, w, 14);
-
-            // Court surface — blueish sport court
-            const courtGrad = ctx.createLinearGradient(0, vanishY, 0, h);
-            courtGrad.addColorStop(0, '#2a6b8a');
-            courtGrad.addColorStop(0.4, '#2f7595');
-            courtGrad.addColorStop(1, '#357fa0');
-            ctx.fillStyle = courtGrad;
-            ctx.beginPath();
-            ctx.moveTo(0, vanishY);
-            ctx.lineTo(w, vanishY);
-            ctx.lineTo(w, h);
-            ctx.lineTo(0, h);
-            ctx.fill();
-
-            // Subtle court texture lines
-            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-            ctx.lineWidth = 1;
-            for (let ty = vanishY; ty < h; ty += 12) {
-                ctx.beginPath();
-                ctx.moveTo(0, ty);
-                ctx.lineTo(w, ty);
-                ctx.stroke();
-            }
-
-            // Perspective court lines
-            const cx = w / 2;
-            const baseLeft = w * -0.15;
-            const baseRight = w * 1.15;
-            const topLeft = cx - w * 0.18;
-            const topRight = cx + w * 0.18;
-
-            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-            ctx.lineWidth = 3;
-
-            // Left sideline
-            ctx.beginPath();
-            ctx.moveTo(baseLeft, h);
-            ctx.lineTo(topLeft, vanishY);
-            ctx.stroke();
-
-            // Right sideline
-            ctx.beginPath();
-            ctx.moveTo(baseRight, h);
-            ctx.lineTo(topRight, vanishY);
-            ctx.stroke();
-
-            // Center line
-            ctx.beginPath();
-            ctx.moveTo(cx, h);
-            ctx.lineTo(cx, vanishY);
-            ctx.stroke();
-
-            // Horizontal court lines with perspective
-            const lines = [0.3, 0.5, 0.7, 0.85];
-            for (const ratio of lines) {
-                const y = vanishY + (h - vanishY) * ratio;
-                const t = ratio;
-                const lx = topLeft + (baseLeft - topLeft) * t;
-                const rx = topRight + (baseRight - topRight) * t;
-                ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(lx, y);
-                ctx.lineTo(rx, y);
-                ctx.stroke();
-            }
-
-            // --- Net ---
-            const netTopY = netY - 40;
-            const netBottomY = netY + 15;
-            const netT = (netY - vanishY) / (h - vanishY);
-            const netLeft = topLeft + (baseLeft - topLeft) * netT - 10;
-            const netRight = topRight + (baseRight - topRight) * netT + 10;
-
-            // Net body (semi-transparent dark mesh background)
-            ctx.fillStyle = 'rgba(30,30,30,0.35)';
-            ctx.fillRect(netLeft, netTopY + 6, netRight - netLeft, netBottomY - netTopY - 6);
-
-            // Net mesh — vertical threads
-            ctx.strokeStyle = 'rgba(220,220,220,0.4)';
-            ctx.lineWidth = 1;
-            const meshSpacing = 12;
-            for (let x = netLeft; x < netRight; x += meshSpacing) {
-                ctx.beginPath();
-                ctx.moveTo(x, netTopY + 6);
-                ctx.lineTo(x, netBottomY);
-                ctx.stroke();
-            }
-            // Net mesh — horizontal threads
-            for (let y = netTopY + 6; y < netBottomY; y += 6) {
-                ctx.beginPath();
-                ctx.moveTo(netLeft, y);
-                ctx.lineTo(netRight, y);
-                ctx.stroke();
-            }
-
-            // White tape along the top
-            ctx.fillStyle = '#f0f0f0';
-            ctx.fillRect(netLeft, netTopY, netRight - netLeft, 7);
-            ctx.strokeStyle = '#ccc';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(netLeft, netTopY, netRight - netLeft, 7);
-
-            // Cable along the bottom
-            ctx.strokeStyle = 'rgba(100,100,100,0.5)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(netLeft, netBottomY);
-            ctx.lineTo(netRight, netBottomY);
-            ctx.stroke();
-
-            // Net posts — cylindrical look
-            const postW = 8;
-            const postH = netBottomY - netTopY + 24;
-            // Left post
-            ctx.fillStyle = '#999';
-            ctx.fillRect(netLeft - postW / 2, netTopY - 12, postW, postH);
-            ctx.fillStyle = 'rgba(255,255,255,0.3)';
-            ctx.fillRect(netLeft - postW / 2, netTopY - 12, postW * 0.4, postH);
-            // Right post
-            ctx.fillStyle = '#999';
-            ctx.fillRect(netRight - postW / 2, netTopY - 12, postW, postH);
-            ctx.fillStyle = 'rgba(255,255,255,0.3)';
-            ctx.fillRect(netRight - postW / 2, netTopY - 12, postW * 0.4, postH);
-            // Post caps
-            ctx.fillStyle = '#bbb';
-            ctx.beginPath();
-            ctx.arc(netLeft, netTopY - 12, postW / 2 + 1, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(netRight, netTopY - 12, postW / 2 + 1, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Net hit flash
-            if (netHitAnim > 0) {
-                ctx.fillStyle = `rgba(255,100,100,${netHitAnim / 30})`;
-                ctx.fillRect(netLeft, netTopY - 5, netRight - netLeft, netBottomY - netTopY + 10);
-            }
-        }
-
-        function drawOpponent() {
-            const w = W(), h = H();
-            const vanishY = h * VANISH_Y_RATIO;
-            const netY = h * NET_Y_RATIO;
-
-            const oppY = vanishY + (netY - vanishY) * 0.55;
-            const oppX = w * opponentX;
-            const s = 0.9; // scale
-
-            const headR = 16 * s;
-            const bodyLen = 55 * s;
-            const armLen = 38 * s;
-            const legLen = 40 * s;
-            const shoulderW = 16 * s;
-
-            const swingAngle = Math.sin(opponentSwingPhase) * 0.9;
-
-            // --- Shadow on court ---
-            ctx.fillStyle = 'rgba(0,0,0,0.15)';
-            ctx.beginPath();
-            ctx.ellipse(oppX, oppY + legLen + 4, 22 * s, 6 * s, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // --- Legs (shorts + legs) ---
-            // Shorts
-            ctx.fillStyle = '#1a1a3a';
-            ctx.beginPath();
-            ctx.moveTo(oppX - 12 * s, oppY);
-            ctx.lineTo(oppX + 12 * s, oppY);
-            ctx.lineTo(oppX + 14 * s, oppY + legLen * 0.35);
-            ctx.lineTo(oppX - 14 * s, oppY + legLen * 0.35);
-            ctx.closePath();
-            ctx.fill();
-
-            // Left leg
-            ctx.strokeStyle = '#d4a574';
-            ctx.lineWidth = 6 * s;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(oppX - 10 * s, oppY + legLen * 0.3);
-            ctx.lineTo(oppX - 14 * s, oppY + legLen);
-            ctx.stroke();
-            // Left shoe
-            ctx.fillStyle = '#eee';
-            ctx.beginPath();
-            ctx.ellipse(oppX - 14 * s, oppY + legLen + 3, 7 * s, 4 * s, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Right leg
-            ctx.strokeStyle = '#d4a574';
-            ctx.lineWidth = 6 * s;
-            ctx.beginPath();
-            ctx.moveTo(oppX + 10 * s, oppY + legLen * 0.3);
-            ctx.lineTo(oppX + 14 * s, oppY + legLen);
-            ctx.stroke();
-            // Right shoe
-            ctx.fillStyle = '#eee';
-            ctx.beginPath();
-            ctx.ellipse(oppX + 14 * s, oppY + legLen + 3, 7 * s, 4 * s, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // --- Body / Shirt ---
-            // Torso
-            ctx.fillStyle = '#2255cc';
-            ctx.beginPath();
-            ctx.moveTo(oppX - shoulderW, oppY - bodyLen);
-            ctx.lineTo(oppX + shoulderW, oppY - bodyLen);
-            ctx.lineTo(oppX + 13 * s, oppY);
-            ctx.lineTo(oppX - 13 * s, oppY);
-            ctx.closePath();
-            ctx.fill();
-            // Shirt collar
-            ctx.fillStyle = '#1a44aa';
-            ctx.beginPath();
-            ctx.moveTo(oppX - 8 * s, oppY - bodyLen);
-            ctx.lineTo(oppX + 8 * s, oppY - bodyLen);
-            ctx.lineTo(oppX + 6 * s, oppY - bodyLen + 6 * s);
-            ctx.lineTo(oppX - 6 * s, oppY - bodyLen + 6 * s);
-            ctx.closePath();
-            ctx.fill();
-
-            // --- Right arm (non-paddle, from our perspective on the right) ---
-            ctx.strokeStyle = '#d4a574';
-            ctx.lineWidth = 5 * s;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(oppX + shoulderW, oppY - bodyLen * 0.82);
-            ctx.quadraticCurveTo(
-                oppX + shoulderW + 18 * s, oppY - bodyLen * 0.45,
-                oppX + shoulderW + 10 * s, oppY - bodyLen * 0.2
-            );
-            ctx.stroke();
-            // Hand
-            ctx.fillStyle = '#d4a574';
-            ctx.beginPath();
-            ctx.arc(oppX + shoulderW + 10 * s, oppY - bodyLen * 0.2, 4 * s, 0, Math.PI * 2);
-            ctx.fill();
-
-            // --- Left arm (paddle arm, from our perspective on the LEFT = opponent's right hand) ---
-            const armBaseX = oppX - shoulderW;
-            const armBaseY = oppY - bodyLen * 0.82;
-            // Upper arm
-            const elbowX = armBaseX - Math.cos(0.3 - swingAngle * 0.5) * armLen * 0.55;
-            const elbowY = armBaseY + Math.sin(0.8 - swingAngle * 0.3) * armLen * 0.55;
-            // Forearm extends from elbow with swing
-            const handX = elbowX - Math.cos(-0.2 + swingAngle) * armLen * 0.5;
-            const handY = elbowY + Math.sin(-0.8 + swingAngle) * armLen * 0.5;
-
-            // Sleeve
-            ctx.strokeStyle = '#2255cc';
-            ctx.lineWidth = 7 * s;
-            ctx.beginPath();
-            ctx.moveTo(armBaseX, armBaseY);
-            ctx.lineTo(armBaseX + (elbowX - armBaseX) * 0.4, armBaseY + (elbowY - armBaseY) * 0.4);
-            ctx.stroke();
-
-            // Arm skin
-            ctx.strokeStyle = '#d4a574';
-            ctx.lineWidth = 5 * s;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(armBaseX, armBaseY);
-            ctx.quadraticCurveTo(elbowX, elbowY, handX, handY);
-            ctx.stroke();
-
-            // Hand grip
-            ctx.fillStyle = '#c89660';
-            ctx.beginPath();
-            ctx.arc(handX, handY, 4.5 * s, 0, Math.PI * 2);
-            ctx.fill();
-
-            // --- Paddle (on left side from our view) ---
-            ctx.save();
-            ctx.translate(handX, handY);
-            const paddleAngle = -0.8 + swingAngle * 0.6;
-            ctx.rotate(paddleAngle);
-            // Handle
-            ctx.fillStyle = '#444';
-            ctx.fillRect(-2.5 * s, 8 * s, 5 * s, 14 * s);
-            // Paddle face
-            ctx.fillStyle = '#22bb55';
-            ctx.strokeStyle = '#188844';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.roundRect(-10 * s, -14 * s, 20 * s, 24 * s, 4 * s);
-            ctx.fill();
-            ctx.stroke();
-            // Paddle face detail
-            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(-6 * s, -10 * s);
-            ctx.lineTo(-6 * s, 6 * s);
-            ctx.moveTo(0, -10 * s);
-            ctx.lineTo(0, 6 * s);
-            ctx.moveTo(6 * s, -10 * s);
-            ctx.lineTo(6 * s, 6 * s);
-            ctx.stroke();
-            ctx.restore();
-
-            // --- Head ---
-            // Neck
-            ctx.fillStyle = '#d4a574';
-            ctx.fillRect(oppX - 4 * s, oppY - bodyLen - 5 * s, 8 * s, 8 * s);
-            // Head shape
-            ctx.fillStyle = '#e8b888';
-            ctx.beginPath();
-            ctx.arc(oppX, oppY - bodyLen - headR - 3 * s, headR, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = '#c49565';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-            // Hair
-            ctx.fillStyle = '#3a2a1a';
-            ctx.beginPath();
-            ctx.arc(oppX, oppY - bodyLen - headR - 5 * s, headR * 0.95, Math.PI * 1.1, Math.PI * 1.9);
-            ctx.quadraticCurveTo(oppX + headR, oppY - bodyLen - headR - 2 * s, oppX + headR * 0.7, oppY - bodyLen - headR + 4 * s);
-            ctx.lineTo(oppX - headR * 0.7, oppY - bodyLen - headR + 4 * s);
-            ctx.closePath();
-            ctx.fill();
-            // Eyes
-            ctx.fillStyle = '#222';
-            ctx.beginPath();
-            ctx.arc(oppX - 5 * s, oppY - bodyLen - headR - 2 * s, 2 * s, 0, Math.PI * 2);
-            ctx.arc(oppX + 5 * s, oppY - bodyLen - headR - 2 * s, 2 * s, 0, Math.PI * 2);
-            ctx.fill();
-            // Cap visor
-            ctx.fillStyle = '#cc3333';
-            ctx.beginPath();
-            ctx.ellipse(oppX, oppY - bodyLen - headR * 1.8, headR * 1.1, 5 * s, 0, 0, Math.PI);
-            ctx.fill();
-            // Cap top
-            ctx.fillStyle = '#cc3333';
-            ctx.beginPath();
-            ctx.arc(oppX, oppY - bodyLen - headR - 5 * s, headR * 0.85, Math.PI * 1.0, Math.PI * 2.0);
-            ctx.fill();
-        }
-
-        function drawBall() {
-            if (!ball) return;
-            const w = W(), h = H();
-            const vanishY = h * VANISH_Y_RATIO;
-            const netY = h * NET_Y_RATIO;
-            const paddleY = h * PADDLE_Y_RATIO;
-
-            let bx, by, radius;
-
-            if (ball.phase === 'incoming' || ball.phase === 'strike_zone') {
-                const t = ball.t;
-                const startBX = w * ball.startX;
-                const endBX = w * ball.targetX;
-                bx = startBX + (endBX - startBX) * t;
-
-                const startBY = vanishY + (netY - vanishY) * 0.3;
-                const endBY = paddleY - 30;
-
-                if (t < 0.6) {
-                    const lt = t / 0.6;
-                    by = startBY + (endBY * 0.7 - startBY) * lt;
-                    by -= Math.sin(lt * Math.PI) * h * 0.08;
-                } else {
-                    const lt = (t - 0.6) / 0.4;
-                    const bounceY = endBY * 0.7;
-                    by = bounceY + (endBY - bounceY) * lt;
-                    by -= Math.sin(lt * Math.PI) * h * 0.12;
-                }
-
-                radius = 8 + t * 28;
-
-            } else if (ball.phase === 'returning') {
-                const t = ball.t;
-                const startBX = w * ball.startX;
-                const endBX = w * ball.targetX;
-                bx = startBX + (endBX - startBX) * t;
-
-                const startBY = paddleY - 60;
-                // swipeQuality: 0=too slow(net), 0.5=perfect(drop at feet), 1.0=too fast(high/deep)
-                const q = ball.swipeQuality;
-
-                // Arc height: perfect = low arc just over net; too fast = very high arc
-                const arcHeight = h * (0.05 + q * 0.25);
-
-                // Landing point: perfect = just past net; too fast = deep behind opponent
-                const perfectLandY = vanishY + (netY - vanishY) * 0.65;
-                const deepLandY = vanishY + (netY - vanishY) * 0.15;
-                const endBY = perfectLandY + (deepLandY - perfectLandY) * Math.max(0, (q - 0.5) * 2);
-
-                by = startBY + (endBY - startBY) * t;
-                by -= Math.sin(t * Math.PI) * arcHeight;
-
-                radius = 36 - t * 28;
-
-            } else if (ball.phase === 'net_hit') {
-                const t = ball.t;
-                bx = w * ball.startX;
-                const netMidY = h * NET_Y_RATIO;
-                by = (h * PADDLE_Y_RATIO - 60) + (netMidY - (h * PADDLE_Y_RATIO - 60)) * Math.min(t * 2, 1);
-                // Ball drops after hitting net
-                if (t > 0.5) {
-                    by = netMidY + (t - 0.5) * 2 * h * 0.15;
-                }
-                radius = 36 - t * 20;
-            }
-
-            if (bx === undefined) return;
-
-            // Shadow on court
-            ctx.fillStyle = 'rgba(0,0,0,0.18)';
-            ctx.beginPath();
-            ctx.ellipse(bx + 2, by + radius * 1.0, radius * 0.9, radius * 0.25, 0.1, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Ball base
-            const ballGrad = ctx.createRadialGradient(bx - radius * 0.2, by - radius * 0.3, radius * 0.1, bx, by, radius);
-            ballGrad.addColorStop(0, '#f5e96b');
-            ballGrad.addColorStop(0.7, '#e0c830');
-            ballGrad.addColorStop(1, '#c4a520');
-            ctx.fillStyle = ballGrad;
-            ctx.beginPath();
-            ctx.arc(bx, by, radius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Wiffle ball holes (small dots)
-            if (radius > 14) {
-                ctx.fillStyle = 'rgba(0,0,0,0.12)';
-                const holeCount = 6;
-                for (let i = 0; i < holeCount; i++) {
-                    const angle = (i / holeCount) * Math.PI * 2 + 0.3;
-                    const hr = radius * 0.45;
-                    const hx = bx + Math.cos(angle) * hr;
-                    const hy = by + Math.sin(angle) * hr;
-                    ctx.beginPath();
-                    ctx.arc(hx, hy, radius * 0.08, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
-
-            // Highlight
-            ctx.fillStyle = 'rgba(255,255,255,0.5)';
-            ctx.beginPath();
-            ctx.arc(bx - radius * 0.28, by - radius * 0.28, radius * 0.3, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Outline
-            ctx.strokeStyle = '#b09420';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(bx, by, radius, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-
-        // Convert screen (clientX, clientY) to canvas coords
-        function screenToCanvas(sx, sy) {
-            const rect = canvas.getBoundingClientRect();
-            return {
-                x: (sx - rect.left) / rect.width * canvas.width,
-                y: (sy - rect.top) / rect.height * canvas.height
-            };
-        }
-
-        // Returns the paddle's current bounding box in canvas coords
-        function getPaddleRect() {
-            const forwardOffset = paddleForward * H() * 0.06;
-            const px = paddleCanvasX;
-            const py = paddleCanvasY - forwardOffset;
-            const scale = 1 + paddleForward * 0.15;
-            const pw = PADDLE_PW * scale;
-            const ph = PADDLE_PH * scale;
-            return { x: px - pw / 2, y: py - ph / 2, w: pw, h: ph, cx: px, cy: py };
-        }
-
-        function drawPaddle() {
-            if (!paddleVisible && paddleForward <= 0) return;
-
-            const r = getPaddleRect();
-            const alpha = paddleVisible ? 1 : Math.max(0, paddleForward * 2);
-
-            ctx.globalAlpha = alpha;
-
-            // Shadow
-            ctx.fillStyle = 'rgba(0,0,0,0.25)';
-            ctx.beginPath();
-            ctx.roundRect(r.x + 4, r.y + 4, r.w, r.h, 6);
-            ctx.fill();
-
-            // Paddle face
-            const paddleGrad = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
-            paddleGrad.addColorStop(0, '#ff5a5a');
-            paddleGrad.addColorStop(1, '#d42f3f');
-            ctx.fillStyle = paddleGrad;
-            ctx.strokeStyle = '#aa1122';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            ctx.roundRect(r.x, r.y, r.w, r.h, 6);
-            ctx.fill();
-            ctx.stroke();
-
-            // Edge guard
-            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.roundRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6, 4);
-            ctx.stroke();
-
-            // Grip lines at bottom
-            ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-            ctx.lineWidth = 2;
-            for (let i = 0; i < 3; i++) {
-                const ly = r.y + r.h * 0.55 + i * (r.h * 0.12);
-                ctx.beginPath();
-                ctx.moveTo(r.x + 8, ly);
-                ctx.lineTo(r.x + r.w - 8, ly);
-                ctx.stroke();
-            }
-
-            ctx.globalAlpha = 1;
-        }
-
-        function drawSwipeTrail() {
-            if (swipeTrail.length < 2) return;
-            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            // Convert screen coords to canvas coords
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            for (let i = 0; i < swipeTrail.length; i++) {
-                const p = swipeTrail[i];
-                const cx = p.x * scaleX;
-                const cy = p.y * scaleY;
-                if (i === 0) ctx.moveTo(cx, cy);
-                else ctx.lineTo(cx, cy);
-            }
-            ctx.stroke();
-        }
-
-        function drawUI() {
-            const w = W(), h = H();
-
-            // Score
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            const scoreBoxW = 200;
-            ctx.beginPath();
-            ctx.roundRect(w / 2 - scoreBoxW / 2, 10, scoreBoxW, 50, 8);
-            ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 28px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${playerScore} - ${opponentScore}`, w / 2, 45);
-
-            // Message
-            if (messageTimer > 0) {
-                const alpha = Math.min(1, messageTimer / 30);
-                ctx.fillStyle = messageColor.replace('1)', `${alpha})`);
-                ctx.font = 'bold 44px sans-serif';
-                ctx.fillText(message, w / 2, h * 0.5);
-            }
-
-            // Strike zone hint
-            if (gameState === 'strike_zone') {
-                ctx.save();
-                ctx.fillStyle = 'rgba(255,255,100,0.5)';
-                ctx.font = 'bold 26px sans-serif';
-                ctx.fillText('SWIPE UP to hit!', w / 2, h * 0.82);
-
-                // Swipe arrow hint
-                const arrowX = w / 2;
-                const arrowY = h * 0.88;
-                ctx.strokeStyle = 'rgba(255,255,100,0.4)';
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.moveTo(arrowX, arrowY + 20);
-                ctx.lineTo(arrowX, arrowY - 20);
-                ctx.lineTo(arrowX - 10, arrowY - 10);
-                ctx.moveTo(arrowX, arrowY - 20);
-                ctx.lineTo(arrowX + 10, arrowY - 10);
-                ctx.stroke();
-
-                ctx.font = '18px sans-serif';
-                ctx.fillStyle = 'rgba(200,200,200,0.5)';
-                ctx.fillText('Slow = net | Just right = drop | Fast = high', w / 2, h * 0.96);
-                ctx.restore();
-            }
-
-            // Swipe speed feedback after hit
-            if (ball && ball.phase === 'returning' && ball.t < 0.3) {
-                const q = ball.swipeQuality;
-                let label, color;
-                if (q < 0.25) {
-                    // shouldn't happen since we handle net, but just in case
-                    label = 'Too soft!';
-                    color = 'rgba(255,100,100,0.8)';
-                } else if (q < 0.65) {
-                    label = 'Nice drop!';
-                    color = 'rgba(100,255,150,0.8)';
-                } else if (q < 0.85) {
-                    label = 'Too hard!';
-                    color = 'rgba(255,200,50,0.8)';
-                } else {
-                    label = 'Way too hard!';
-                    color = 'rgba(255,80,80,0.8)';
-                }
-                ctx.fillStyle = color;
-                ctx.font = 'bold 32px sans-serif';
-                ctx.fillText(label, w / 2, h * 0.75);
-            }
-        }
-
-        // --- Game Logic ---
-        function startOpponentHit() {
-            opponentTargetX = 0.3 + Math.random() * 0.4;
-            opponentSwingPhase = 0;
-            gameState = 'opponent_windup';
-            stateTimer = 0;
-        }
-
-        function launchBall() {
-            ball = {
-                t: 0,
-                startX: opponentX,
-                targetX: 0.25 + Math.random() * 0.5,
-                phase: 'incoming',
-                swipeQuality: 0
-            };
-            gameState = 'incoming';
-        }
-
-        function processSwipe(endX, endY) {
-            const elapsed = Math.max(Date.now() - swipeStartTime, 10);
-            const dx = endX - swipeStartX;
-            const dy = endY - swipeStartY; // negative = upward swipe
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            // Must be an upward swipe with minimal threshold
-            if (dy > -8 || dist < 10) return; // not a valid upward swipe
-
-            // Speed in pixels per millisecond (using upward component)
-            const upwardSpeed = Math.abs(dy) / elapsed;
-
-            // Map speed to quality:
-            // < 0.3 px/ms = too slow (hits net)
-            // 0.3 - 0.8 = sweet spot (nice drop)
-            // > 0.8 = too fast (goes high/deep)
-            // Normalize to 0-1 where 0.3-0.5 is the sweet zone
-            const SWEET_LOW = 0.4;
-            const SWEET_HIGH = 1.0;
-            const TOO_FAST = 2.0;
-
-            let swipeQuality;
-            if (upwardSpeed < SWEET_LOW) {
-                // Too slow - will hit net
-                swipeQuality = upwardSpeed / SWEET_LOW * 0.25; // 0 to 0.25
-            } else if (upwardSpeed <= SWEET_HIGH) {
-                // Sweet spot - nice drop
-                swipeQuality = 0.3 + ((upwardSpeed - SWEET_LOW) / (SWEET_HIGH - SWEET_LOW)) * 0.3; // 0.3 to 0.6
-            } else {
-                // Too fast - goes high
-                swipeQuality = 0.6 + Math.min(0.4, ((upwardSpeed - SWEET_HIGH) / (TOO_FAST - SWEET_HIGH)) * 0.4); // 0.6 to 1.0
-            }
-
-            lastSwipeSpeed = upwardSpeed;
-
-            // Check if paddle is aligned with ball
-            if (!checkHit()) {
-                message = 'Miss!';
-                messageColor = 'rgba(255,100,100,1)';
-                messageTimer = 50;
-                return;
-            }
-
-            // Convert paddle canvas position to normalized 0-1
-            const hitX = paddleCanvasX / W();
-
-            if (swipeQuality < 0.25) {
-                // Ball hits the net
-                ball = {
-                    t: 0,
-                    startX: hitX,
-                    targetX: hitX,
-                    phase: 'net_hit',
-                    swipeQuality: swipeQuality
-                };
-                gameState = 'net_hit';
-                stateTimer = 0;
-                netHitAnim = 30;
-                message = 'Net!';
-                messageColor = 'rgba(255,100,100,1)';
-                messageTimer = 60;
-            } else {
-                // Ball returns over net
-                const returnTargetX = 0.3 + Math.random() * 0.4;
-                ball = {
-                    t: 0,
-                    startX: hitX,
-                    targetX: returnTargetX,
-                    phase: 'returning',
-                    swipeQuality: swipeQuality
-                };
-                gameState = 'returning';
-            }
-            swipeTrail = [];
-        }
-
-        function getBallPos() {
-            if (!ball) return null;
-            const w = W(), h = H();
-            const vanishY = h * VANISH_Y_RATIO;
-            const netY = h * NET_Y_RATIO;
-            const paddleY = h * PADDLE_Y_RATIO;
-            const t = ball.t;
-            const startBX = w * ball.startX;
-            const endBX = w * ball.targetX;
-            const bx = startBX + (endBX - startBX) * t;
-            const startBY = vanishY + (netY - vanishY) * 0.3;
-            const endBY = paddleY - 30;
-            let by;
-            if (t < 0.6) {
-                const lt = t / 0.6;
-                by = startBY + (endBY * 0.7 - startBY) * lt;
-                by -= Math.sin(lt * Math.PI) * h * 0.08;
-            } else {
-                const lt = (t - 0.6) / 0.4;
-                const bounceY = endBY * 0.7;
-                by = bounceY + (endBY - bounceY) * lt;
-                by -= Math.sin(lt * Math.PI) * h * 0.12;
-            }
-            const radius = 8 + t * 28;
-            return { x: bx, y: by, r: radius };
-        }
-
-        function checkHit() {
-            if (!ball || ball.phase !== 'strike_zone' || !paddleVisible) return false;
-            const bp = getBallPos();
-            if (!bp) return false;
-            const pr = getPaddleRect();
-            // Check if ball circle overlaps paddle rect (with generous margin)
-            const margin = bp.r * 0.5;
-            const overlapX = bp.x + bp.r + margin > pr.x && bp.x - bp.r - margin < pr.x + pr.w;
-            const overlapY = bp.y + bp.r + margin > pr.y && bp.y - bp.r - margin < pr.y + pr.h;
-            return overlapX && overlapY;
-        }
-
-        function playerPoint() {
-            playerScore++;
-            message = 'Point!';
-            messageColor = 'rgba(100,255,150,1)';
-            messageTimer = 90;
-            gameState = 'point_over';
-            stateTimer = 0;
-            ball = null;
-        }
-
-        function opponentPoint() {
-            opponentScore++;
-            message = 'Opponent point!';
-            messageColor = 'rgba(255,150,100,1)';
-            messageTimer = 90;
-            gameState = 'point_over';
-            stateTimer = 0;
-            ball = null;
-        }
-
-        // --- Update ---
-        function update() {
-            stateTimer++;
-            if (messageTimer > 0) messageTimer--;
-            if (netHitAnim > 0) netHitAnim--;
-
-            // Paddle forward lunge decays back after swing
-            if (!isSwiping && paddleForward > 0) {
-                paddleForward = Math.max(0, paddleForward - 0.06);
-            }
-
-            opponentX += (opponentTargetX - opponentX) * 0.05;
-
-            if (opponentSwingPhase > 0) {
-                opponentSwingPhase += 0.15;
-                if (opponentSwingPhase > Math.PI) opponentSwingPhase = 0;
-            }
-
-            // Fade old swipe trail points
-            const now = Date.now();
-            swipeTrail = swipeTrail.filter(p => now - p.time < 200);
-
-            switch (gameState) {
-                case 'waiting':
-                    if (stateTimer > 60) startOpponentHit();
-                    break;
-
-                case 'opponent_windup':
-                    if (stateTimer > 40) opponentSwingPhase = 0.01;
-                    if (stateTimer > 55) launchBall();
-                    break;
-
-                case 'incoming':
-                    if (ball) {
-                        ball.t += BALL_SPEED_INCOMING;
-                        if (ball.t >= 0.85) {
-                            ball.phase = 'strike_zone';
-                            gameState = 'strike_zone';
-                            stateTimer = 0;
-                        }
-                    }
-                    break;
-
-                case 'strike_zone':
-                    if (ball) {
-                        ball.t += BALL_SPEED_INCOMING * 0.4;
-                        if (ball.t >= 1.15) {
-                            opponentPoint();
-                        }
-                    }
-                    break;
-
-                case 'returning':
-                    if (ball) {
-                        ball.t += BALL_SPEED_RETURNING;
-                        if (ball.t >= 1) {
-                            const q = ball.swipeQuality;
-                            if (q >= 0.25 && q < 0.65) {
-                                // Nice drop - player wins the point
-                                playerPoint();
-                            } else {
-                                // Too hard - opponent can return (for now, player loses)
-                                opponentPoint();
-                                message = 'Too deep!';
-                                messageColor = 'rgba(255,150,100,1)';
-                            }
-                        }
-                    }
-                    break;
-
-                case 'net_hit':
-                    if (ball) {
-                        ball.t += 0.015;
-                        if (ball.t >= 1) {
-                            opponentPoint();
-                        }
-                    }
-                    break;
-
-                case 'point_over':
-                    if (stateTimer > 100) {
-                        gameState = 'waiting';
-                        stateTimer = 0;
-                        opponentTargetX = 0.5;
-                    }
-                    break;
-            }
-        }
-
-        // --- Render ---
-        function render() {
-            ctx.clearRect(0, 0, W(), H());
-            drawCourt();
-            drawOpponent();
-            drawBall();
-            drawPaddle();
-            drawSwipeTrail();
-            drawUI();
-        }
-
-        function gameLoop() {
-            update();
-            render();
-            requestAnimationFrame(gameLoop);
-        }
-
-        // --- Touch Controls ---
-        let touchId = null;
-
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            touchId = touch.identifier;
-            paddleVisible = true;
-
-            // Place paddle exactly at finger position
-            const cp = screenToCanvas(touch.clientX, touch.clientY);
-            paddleCanvasX = cp.x;
-            paddleCanvasY = cp.y;
-
-            if (gameState === 'strike_zone') {
-                swipeStartX = touch.clientX;
-                swipeStartY = touch.clientY;
-                swipeStartTime = Date.now();
-                isSwiping = true;
-                swipeTrail = [{ x: touch.clientX, y: touch.clientY, time: Date.now() }];
-            }
-        }, { passive: false });
-
-        canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            const touch = Array.from(e.touches).find(t => t.identifier === touchId);
-            if (!touch) return;
-
-            // Always update paddle to follow finger
-            const cp = screenToCanvas(touch.clientX, touch.clientY);
-            paddleCanvasX = cp.x;
-            paddleCanvasY = cp.y;
-
-            if (isSwiping && gameState === 'strike_zone') {
-                swipeTrail.push({ x: touch.clientX, y: touch.clientY, time: Date.now() });
-                const upward = Math.max(0, swipeStartY - touch.clientY);
-                paddleForward = Math.min(1, upward / 120);
-            }
-        }, { passive: false });
-
-        document.addEventListener('touchend', (e) => {
-            if (touchId === null) return;
-            const touch = Array.from(e.changedTouches).find(t => t.identifier === touchId);
-            if (!touch) return;
-            e.preventDefault();
-            if (isSwiping && gameState === 'strike_zone') {
-                processSwipe(touch.clientX, touch.clientY);
-                isSwiping = false;
-            }
-            paddleVisible = false;
-            touchId = null;
-        }, { passive: false });
-
-        document.addEventListener('touchcancel', () => {
-            paddleVisible = false;
-            isSwiping = false;
-            touchId = null;
-        });
-
-        // --- Mouse Controls (desktop testing) ---
-        let mouseDown = false;
-
-        canvas.addEventListener('mousedown', (e) => {
-            mouseDown = true;
-            paddleVisible = true;
-
-            const cp = screenToCanvas(e.clientX, e.clientY);
-            paddleCanvasX = cp.x;
-            paddleCanvasY = cp.y;
-
-            if (gameState === 'strike_zone') {
-                swipeStartX = e.clientX;
-                swipeStartY = e.clientY;
-                swipeStartTime = Date.now();
-                isSwiping = true;
-                swipeTrail = [{ x: e.clientX, y: e.clientY, time: Date.now() }];
+        const ballMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(BALL_R, 32, 32),
+            new THREE.MeshStandardMaterial({ color: 0xccff00, emissive: 0xccff00, emissiveIntensity: 0.2 })
+        );
+        ballMesh.castShadow = true;
+        scene.add(ballMesh);
+        const ballBody = new CANNON.Body({ mass: 0.026, shape: new CANNON.Sphere(BALL_R), material: ballMat, linearDamping: 0.05 });
+        world.addBody(ballBody);
+        const resetBall = () => { ballBody.position.set(0, 10, 0); ballBody.velocity.set(0, 0, 0); ballBody.sleep(); };
+        resetBall();
+
+        // Paddle
+        const paddleGroup = new THREE.Group();
+        const paddleFace = new THREE.Mesh(new THREE.BoxGeometry(PADDLE_W, PADDLE_H, 0.02), new THREE.MeshStandardMaterial({ color: 0xe63946 }));
+        paddleFace.castShadow = true;
+        paddleGroup.add(paddleFace);
+        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.15), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+        handle.position.y = -0.25;
+        paddleGroup.add(handle);
+        scene.add(paddleGroup);
+
+        const paddleBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: paddleMat, shape: new CANNON.Box(new CANNON.Vec3(PADDLE_W / 2, PADDLE_H / 2 + 0.07, 0.02)) });
+        world.addBody(paddleBody);
+
+        // Opponent (Simulated dummy)
+        const opp = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 1, 4, 8), new THREE.MeshStandardMaterial({ color: 0x457b9d }));
+        opp.position.set(0, 1, -COURT_L / 2 - 0.5);
+        scene.add(opp);
+
+        // --- Gameplay Logic ---
+        let gameState = 'IDLE';
+        let playerScore = 0, opponentScore = 0;
+        let lastPaddleY = 0;
+
+        const showMsg = (txt) => {
+            const el = document.getElementById('message');
+            el.innerText = txt; el.classList.add('show');
+            setTimeout(() => el.classList.remove('show'), 1500);
+        };
+
+        const serve = () => {
+            gameState = 'PLAY';
+            resetBall();
+            ballBody.wakeUp();
+            ballBody.position.set((Math.random() - 0.5) * 3, 1.5, -COURT_L / 2);
+            // Dynamic serve speed based on difficulty or random
+            const vz = 6 + Math.random() * 3;
+            const vy = 4 + Math.random() * 2;
+            const vx = (Math.random() - 0.5) * 2;
+            ballBody.velocity.set(vx, vy, vz);
+            document.getElementById('hint').style.opacity = 0;
+        };
+
+        // Collision callback
+        ballBody.addEventListener('collide', (e) => {
+            if (e.body === paddleBody) {
+                // Determine hit strength based on how fast the user moved the paddle up
+                const dy = (mouse.y - lastPaddleY) * 50;
+                ballBody.velocity.z = -Math.abs(ballBody.velocity.z) * 1.1; // Reverse
+                ballBody.velocity.y += 2 + Math.max(0, dy); // Upward impulse
+                ballBody.velocity.x += (mouse.x) * 3; // Directional control
+                showMsg('BOOM!');
             }
         });
 
-        canvas.addEventListener('mousemove', (e) => {
-            if (!mouseDown) return;
+        // --- Controls ---
+        const mouse = new THREE.Vector2();
+        const raycaster = new THREE.Raycaster();
+        const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), -6.5);
+        const intersectPoint = new THREE.Vector3();
 
-            const cp = screenToCanvas(e.clientX, e.clientY);
-            paddleCanvasX = cp.x;
-            paddleCanvasY = cp.y;
+        const updatePaddle = (x, y) => {
+            mouse.x = (x / window.innerWidth) * 2 - 1;
+            mouse.y = -(y / window.innerHeight) * 2 + 1;
 
-            if (isSwiping && gameState === 'strike_zone') {
-                swipeTrail.push({ x: e.clientX, y: e.clientY, time: Date.now() });
-                const upward = Math.max(0, swipeStartY - e.clientY);
-                paddleForward = Math.min(1, upward / 120);
+            raycaster.setFromCamera(mouse, camera);
+            raycaster.ray.intersectPlane(planeZ, intersectPoint);
+
+            const tx = THREE.MathUtils.clamp(intersectPoint.x, -COURT_W / 2 - 0.5, COURT_W / 2 + 0.5);
+            const ty = THREE.MathUtils.clamp(intersectPoint.y, 0.2, 2.5);
+
+            paddleBody.position.set(tx, ty, 6.5);
+            paddleGroup.position.copy(paddleBody.position);
+
+            // Visual tilt
+            paddleGroup.rotation.x = -0.2 + mouse.y * 0.3;
+            paddleGroup.rotation.y = mouse.x * 0.4;
+            paddleBody.quaternion.copy(paddleGroup.quaternion);
+
+            lastPaddleY = mouse.y;
+        };
+
+        window.addEventListener('pointermove', e => updatePaddle(e.clientX, e.clientY));
+        window.addEventListener('pointerdown', () => { if (gameState === 'IDLE') serve(); });
+
+        // --- Main Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            world.step(1 / 60);
+
+            ballMesh.position.copy(ballBody.position);
+            ballMesh.quaternion.copy(ballBody.quaternion);
+
+            // Bounds / Scoring
+            if (gameState === 'PLAY') {
+                if (ballBody.position.y < -0.5 || Math.abs(ballBody.position.z) > 15) {
+                    if (ballBody.position.z > 0) {
+                        opponentScore++;
+                        showMsg('OPPONENT POINT');
+                    } else {
+                        playerScore++;
+                        showMsg('PLAYER POINT');
+                    }
+                    document.getElementById('player-score').innerText = playerScore;
+                    document.getElementById('opponent-score').innerText = opponentScore;
+                    gameState = 'IDLE';
+                    resetBall();
+                    setTimeout(() => { if (gameState === 'IDLE') serve(); }, 2000);
+                }
             }
+
+            // Slight camera follow
+            camera.position.x += (mouse.x * 0.5 - camera.position.x) * 0.05;
+            camera.lookAt(0, 0.8, 0);
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        document.addEventListener('mouseup', (e) => {
-            if (!mouseDown) return;
-            if (isSwiping && gameState === 'strike_zone') {
-                processSwipe(e.clientX, e.clientY);
-                isSwiping = false;
-            }
-            paddleVisible = false;
-            mouseDown = false;
-        });
-
-        // Prevent scrolling
-        document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-
-        // Start
-        gameState = 'waiting';
-        stateTimer = 0;
-        gameLoop();
+        // Initialize
+        showMsg('Ready?');
+        setTimeout(serve, 2000);
+        animate();
     </script>
 </body>
+
 </html>
