@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pocket Pickleball (PlayCanvas)</title>
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: #0a0a0a;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        #application {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            /* Center everything vertically */
+            padding: 30px;
+            box-sizing: border-box;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 15px 30px;
+            color: white;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+
+        #scoreboard {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px 25px;
+            border-radius: 40px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            z-index: 100;
+            font-size: 0.9em;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .score-item {
+            text-align: center;
+        }
+
+        .score-val {
+            display: block;
+            font-size: 1.6em;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .score-label {
+            font-size: 0.7em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #aaa;
+        }
+
+        .score-val.good {
+            color: #4CAF50;
+        }
+
+        .score-val.fair {
+            color: #8BC34A;
+        }
+
+        .score-val.short {
+            color: #FFC107;
+        }
+
+        .score-val.high {
+            color: #F44336;
+        }
+
+        #message {
+            font-size: 64px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            opacity: 0;
+            color: white;
+            /* Default color */
+            transform: scale(0.8);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            margin-top: -50px;
+        }
+
+        #message.good {
+            color: #4CAF50;
+        }
+
+        #message.fair {
+            color: #8BC34A;
+        }
+
+        #message.short {
+            color: #FFC107;
+        }
+
+        #message.high {
+            color: #F44336;
+        }
+
+        #message.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        #hint {
+            position: absolute;
+            bottom: 30px;
+            /* Stick to bottom */
+            font-size: 18px;
+            opacity: 0.8;
+            transition: opacity 0.5s;
+            text-align: center;
+        }
+
+        /* --- Side Menu Styles --- */
+        #side-controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: auto;
+            z-index: 500;
+        }
+
+        .side-btn {
+            width: 54px;
+            height: 54px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            color: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .side-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .side-btn:active {
+            transform: scale(0.95);
+        }
+
+        .side-btn svg {
+            width: 28px;
+            height: 28px;
+            fill: currentColor;
+        }
+
+        .side-btn.restart-btn {
+            color: #ff5252;
+            border-color: rgba(255, 82, 82, 0.3);
+        }
+
+        .side-btn.restart-btn:hover {
+            background: rgba(255, 82, 82, 0.1);
+            border-color: rgba(255, 82, 82, 0.6);
+        }
+
+        .side-btn[data-state="paused"] .pause-icon {
+            display: none;
+        }
+
+        .side-btn[data-state="playing"] .play-icon {
+            display: none;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <!-- PlayCanvas Engine (v2.0 - matches ammo.751ec5f build) -->
+    <script src="https://code.playcanvas.com/playcanvas-stable.min.js"></script>
+    <!-- Ammo.js Physics -->
+    <script src="https://code.playcanvas.com/ammo.751ec5f.js"></script>
+</head>
+
+<body>
+    <canvas id="application"></canvas>
+
+    <div id="ui">
+        <div id="scoreboard">
+            <div class="score-item">
+                <span class="score-label">Good Drops</span>
+                <span id="good-score" class="score-val good">0</span>
+            </div>
+            <div class="score-item">
+                <span class="score-label">Fair Drops</span>
+                <span id="fair-score" class="score-val fair">0</span>
+            </div>
+            <div class="score-item">
+                <span class="score-label">Shorts</span>
+                <span id="short-score" class="score-val short">0</span>
+            </div>
+            <div class="score-item">
+                <span class="score-label">High Ball</span>
+                <span id="high-score" class="score-val high">0</span>
+            </div>
+        </div>
+
+        <div id="side-controls">
+            <button id="toggle-pause-btn" class="side-btn" title="Pause/Resume" data-state="playing"
+                onclick="togglePause()">
+                <svg class="pause-icon" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+                <svg class="play-icon" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                </svg>
+            </button>
+            <button class="side-btn restart-btn" title="Restart Game" onclick="restartGame()">
+                <svg viewBox="0 0 24 24">
+                    <path
+                        d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                </svg>
+            </button>
+        </div>
+
+        <div id="message">Loading...</div>
+        <div id="hint" class="glass">Swipe SLOW to drop it just over the net!</div>
+    </div>
+
+    <script>
+        // Use an IIFE to keep global scope clean
+        (function () {
+            const startApp = () => {
+                if (typeof Ammo === 'function') {
+                    // Likely WASM build, needs initialization
+                    Ammo().then(initGame);
+                } else {
+                    // Likely asm.js build or already initialized
+                    initGame();
+                }
+            };
+
+            if (typeof Ammo !== 'undefined') {
+                startApp();
+            } else {
+                window.addEventListener('load', () => {
+                    if (typeof Ammo !== 'undefined') {
+                        startApp();
+                    } else {
+                        console.error("Ammo.js failed to load!");
+                    }
+                });
+            }
+
+            function initGame() {
+                try {
+                    console.log('[PocketPickleball] initGame called, Ammo type:', typeof Ammo);
+
+                    // Shim missing methods for older Ammo.js builds
+                    if (Ammo.btRigidBody && Ammo.btRigidBody.prototype && !Ammo.btRigidBody.prototype.setRollingFriction) {
+                        Ammo.btRigidBody.prototype.setRollingFriction = function () { };
+                        Ammo.btRigidBody.prototype.setSpinningFriction = function () { };
+                        console.log('[PocketPickleball] Shimmed missing Ammo.js friction methods');
+                    }
+
+                    // --- Constants ---
+                    const COURT_W = 6.1;
+                    const COURT_L = 13.41;
+                    const NET_H = 0.914;
+                    const BALL_R = 0.07;
+
+                    // --- Create Application ---
+                    const canvas = document.getElementById('application');
+                    const app = new pc.Application(canvas, {
+                        mouse: new pc.Mouse(canvas),
+                        touch: new pc.TouchDevice(canvas),
+                        elementInput: new pc.ElementInput(canvas),
+                        keyboard: new pc.Keyboard(window)
+                    });
+
+                    // Start app first - initializes physics (Ammo.js) system
+                    app.start();
+
+                    // Set fill mode to fill the window
+                    app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
+                    app.setCanvasResolution(pc.RESOLUTION_AUTO);
+
+                    // Ensure canvas resizes when window changes
+                    window.addEventListener('resize', () => app.resizeCanvas());
+
+                    // --- Setup Scene ---
+                    // Add Light
+                    const light = new pc.Entity('DirectionalLight');
+                    light.addComponent('light', {
+                        type: 'directional',
+                        color: new pc.Color(1, 1, 1),
+                        castShadows: true,
+                        intensity: 1.2,
+                        shadowBias: 0.2,
+                        normalOffsetBias: 0.05,
+                        shadowDistance: 20
+                    });
+                    light.setLocalEulerAngles(45, 30, 0);
+                    app.root.addChild(light);
+
+                    const ambient = new pc.Entity('AmbientLight');
+                    ambient.addComponent('light', {
+                        type: 'point',
+                        color: new pc.Color(0.8, 0.8, 1),
+                        intensity: 0.5,
+                        range: 100
+                    });
+                    ambient.setPosition(0, 10, 0);
+                    app.root.addChild(ambient);
+
+                    // Add Camera
+                    const camera = new pc.Entity('MainCamera');
+                    camera.addComponent('camera', {
+                        clearColor: new pc.Color(0.1, 0.11, 0.17), // Dark blue-ish bg
+                        farClip: 100,
+                        fov: 60
+                    });
+                    camera.setPosition(0, 2.5, 9);
+                    camera.lookAt(0, 0.8, 0);
+                    app.root.addChild(camera);
+
+                    // --- Materials ---
+                    const createMaterial = (color) => {
+                        const material = new pc.StandardMaterial();
+                        material.diffuse = color;
+                        material.update();
+                        return material;
+                    };
+                    const matCourt = createMaterial(new pc.Color(0.14, 0.38, 0.54)); // 0x24628a
+                    const matLine = createMaterial(new pc.Color(1, 1, 1));
+                    const matNet = createMaterial(new pc.Color(1, 1, 1));
+                    matNet.rollOffFactor = 0; // Simple wireframe-ish look
+                    matNet.opacity = 0.3;
+                    matNet.blendType = pc.BLEND_NORMAL;
+                    matNet.update();
+
+                    const matBall = createMaterial(new pc.Color(0.8, 1.0, 0)); // #ccff00
+                    matBall.emissive = new pc.Color(0.2, 0.25, 0);
+                    matBall.update();
+
+                    const matPaddle = createMaterial(new pc.Color(0.9, 0.22, 0.27)); // #e63946
+                    const matDark = createMaterial(new pc.Color(0.1, 0.1, 0.1));
+
+                    // --- Environment ---
+
+                    // Floor (Visual only, below court)
+                    const floor = new pc.Entity('Floor');
+                    floor.addComponent('render', { type: 'cylinder' });
+                    floor.setLocalScale(40, 0.1, 40);
+                    floor.setLocalPosition(0, -0.15, 0);
+                    floor.render.material = matDark;
+                    app.root.addChild(floor);
+
+                    // Court Base (Physics + Visual)
+                    const court = new pc.Entity('Court');
+                    court.addComponent('render', { type: 'plane' });
+                    court.setLocalScale(COURT_W, 1, COURT_L);
+                    court.setLocalPosition(0, 0, 0);
+                    court.render.material = matCourt;
+                    // Add collision/rigidbody
+                    court.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2, 0.1, COURT_L / 2) });
+                    court.addComponent('rigidbody', { type: 'static', friction: 0.1, restitution: 0.95 }); // High restitution for big bounces
+                    // Note: Plane visual is flat, but collision box needs depth. We offset pos slightly
+                    // PlayCanvas plane faces Y up.
+                    app.root.addChild(court);
+
+                    // Court Friction Fix (Since PC doesn't have fine-grained material pairs easily accessible in JS API without deep dive, we rely on body properties)
+
+                    // Lines
+                    const addLine = (w, l, x, z) => {
+                        const line = new pc.Entity();
+                        line.addComponent('render', { type: 'plane' });
+                        line.setLocalScale(w, 1, l);
+                        line.setLocalPosition(x, 0.01, z); // Raised
+                        line.render.material = matLine;
+                        app.root.addChild(line);
+                    };
+                    addLine(COURT_W, 0.05, 0, COURT_L / 2);
+                    addLine(COURT_W, 0.05, 0, -COURT_L / 2);
+                    addLine(0.05, COURT_L, COURT_W / 2, 0);
+                    addLine(0.05, COURT_L, -COURT_W / 2, 0);
+                    addLine(COURT_W, 0.05, 0, 2.13);
+                    addLine(COURT_W, 0.05, 0, -2.13);
+                    addLine(0.05, COURT_L - 4.26, 0, 0);
+
+                    // Net
+                    const net = new pc.Entity('Net');
+                    const netVis = new pc.Entity('NetVisual');
+                    netVis.addComponent('render', { type: 'box' });
+                    netVis.setLocalScale(COURT_W + 0.4, NET_H, 0.02);
+                    netVis.setLocalPosition(0, NET_H / 2, 0);
+                    netVis.render.material = matNet;
+
+                    const tape = new pc.Entity('NetTape');
+                    tape.addComponent('render', { type: 'box' });
+                    tape.setLocalScale(COURT_W + 0.4, 0.05, 0.05);
+                    tape.setLocalPosition(0, NET_H, 0);
+                    tape.render.material = matLine;
+
+                    const postL = new pc.Entity('PostL');
+                    postL.addComponent('render', { type: 'cylinder' });
+                    postL.setLocalScale(0.08, NET_H + 0.1, 0.08);
+                    postL.setLocalPosition(-(COURT_W / 2 + 0.2), NET_H / 2, 0);
+                    postL.render.material = matDark;
+
+                    const postR = new pc.Entity('PostR');
+                    postR.addComponent('render', { type: 'cylinder' });
+                    postR.setLocalScale(0.08, NET_H + 0.1, 0.08);
+                    postR.setLocalPosition(COURT_W / 2 + 0.2, NET_H / 2, 0);
+                    postR.render.material = matDark;
+
+                    net.addChild(netVis); net.addChild(tape); net.addChild(postL); net.addChild(postR);
+                    net.setLocalPosition(0, 0, 0);
+                    app.root.addChild(net);
+
+                    // Net collider - separate entity so collision center matches visual center
+                    const netCol = new pc.Entity('NetCollider');
+                    netCol.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2 + 0.2, NET_H / 2, 0.05) });
+                    netCol.addComponent('rigidbody', { type: 'static' });
+                    netCol.setLocalPosition(0, NET_H / 2, 0);
+                    app.root.addChild(netCol);
+
+                    // --- Opponent (Bulky Muscular Right-handed player) ---
+                    const matSkin = createMaterial(new pc.Color(0.85, 0.65, 0.5));
+                    const matShirt = createMaterial(new pc.Color(0.2, 0.4, 0.8));
+                    const matShorts = createMaterial(new pc.Color(0.15, 0.15, 0.15));
+                    const matShoe = createMaterial(new pc.Color(1, 1, 1));
+                    const matHeadband = createMaterial(new pc.Color(0.9, 0.1, 0.1)); // Red headband
+
+                    const opponent = new pc.Entity('Opponent');
+                    // Kitchen line is at z = -2.13
+                    opponent.setLocalPosition(0, 0, -2.13);
+
+                    // Torso (BULKY - wide and muscular)
+                    const torso = new pc.Entity('Torso');
+                    torso.addComponent('render', { type: 'box' });
+                    torso.setLocalScale(0.6, 0.7, 0.35); // Much wider and taller
+                    torso.setLocalPosition(0, 1.3, 0);
+                    torso.render.material = matShirt;
+                    opponent.addChild(torso);
+
+                    // Neck (thick, muscular)
+                    const neck = new pc.Entity('Neck');
+                    neck.addComponent('render', { type: 'cylinder' });
+                    neck.setLocalScale(0.15, 0.14, 0.15); // Thicker neck
+                    neck.setLocalPosition(0, 1.72, 0);
+                    neck.render.material = matSkin;
+                    opponent.addChild(neck);
+
+                    // Head (larger, more imposing)
+                    const head = new pc.Entity('Head');
+                    head.addComponent('render', { type: 'sphere' });
+                    head.setLocalScale(0.28, 0.3, 0.28); // Bigger head
+                    head.setLocalPosition(0, 1.88, 0);
+                    head.render.material = matSkin;
+                    opponent.addChild(head);
+
+                    // HEADBAND (wrapped around head)
+                    const headband = new pc.Entity('Headband');
+                    headband.addComponent('render', { type: 'cylinder' });
+                    headband.setLocalScale(0.3, 0.06, 0.3); // Wide headband
+                    headband.setLocalPosition(0, 1.92, 0);
+                    headband.render.material = matHeadband;
+                    opponent.addChild(headband);
+
+                    // Shorts
+                    const shorts = new pc.Entity('Shorts');
+                    shorts.addComponent('render', { type: 'box' });
+                    shorts.setLocalScale(0.55, 0.28, 0.32); // Wider to match body
+                    shorts.setLocalPosition(0, 0.88, 0);
+                    shorts.render.material = matShorts;
+                    opponent.addChild(shorts);
+
+                    // Legs (MUSCULAR - thicker legs)
+                    const addLeg = (xOff) => {
+                        // Upper leg (THICK thigh)
+                        const thigh = new pc.Entity();
+                        thigh.addComponent('render', { type: 'box' });
+                        thigh.setLocalScale(0.18, 0.38, 0.18); // Much thicker
+                        thigh.setLocalPosition(xOff, 0.56, 0);
+                        thigh.render.material = matSkin;
+                        opponent.addChild(thigh);
+
+                        // Lower leg (muscular calf)
+                        const calf = new pc.Entity();
+                        calf.addComponent('render', { type: 'box' });
+                        calf.setLocalScale(0.16, 0.34, 0.16); // Thicker calf
+                        calf.setLocalPosition(xOff, 0.26, 0);
+                        calf.render.material = matSkin;
+                        opponent.addChild(calf);
+
+                        // Shoe
+                        const shoe = new pc.Entity();
+                        shoe.addComponent('render', { type: 'box' });
+                        shoe.setLocalScale(0.17, 0.1, 0.24);
+                        shoe.setLocalPosition(xOff, 0.07, 0.05);
+                        shoe.render.material = matShoe;
+                        opponent.addChild(shoe);
+                    };
+                    addLeg(-0.15);
+                    addLeg(0.15);
+
+                    // Left arm (non-dominant, relaxed at side - single piece)
+                    const oppArmL = new pc.Entity('OppArmL');
+                    oppArmL.addComponent('render', { type: 'box' });
+                    oppArmL.setLocalScale(0.14, 0.7, 0.14); // Single arm piece
+                    oppArmL.setLocalPosition(-0.42, 1.0, 0.05);
+                    oppArmL.setLocalEulerAngles(10, 0, 15);
+                    oppArmL.render.material = matSkin;
+                    opponent.addChild(oppArmL);
+
+                    // Right arm (DOMINANT - MASSIVE MUSCLES for smashing, single piece)
+                    const oppArmR = new pc.Entity('OppArmR');
+                    oppArmR.addComponent('render', { type: 'box' });
+                    oppArmR.setLocalScale(0.16, 0.75, 0.16); // Single thick arm
+                    oppArmR.setLocalPosition(0.42, 1.0, 0);
+                    oppArmR.setLocalEulerAngles(0, 0, -20);
+                    oppArmR.render.material = matSkin;
+                    opponent.addChild(oppArmR);
+
+                    const oppPaddle = new pc.Entity('OppPaddle');
+                    oppPaddle.addComponent('render', { type: 'box' });
+                    oppPaddle.setLocalScale(0.22, 0.35, 0.02);
+                    oppPaddle.setLocalPosition(-0.5, 1.4, 0.18); // LEFT side (opp's right), shoulder height
+                    oppPaddle.setLocalEulerAngles(15, 0, 10); // Adjusted angle for left side
+                    oppPaddle.render.material = matPaddle;
+                    opponent.addChild(oppPaddle);
+
+                    // Smash animation state
+                    let smashAnimT = -1; // -1 = not animating
+                    const SMASH_DURATION = 0.25; // fast aggressive swing
+                    const oppArmRestPos = new pc.Vec3(0.42, 1.0, 0);
+                    const oppArmRestRot = new pc.Vec3(0, 0, -20);
+                    const oppPaddleRestPos = new pc.Vec3(-0.5, 1.4, 0.18); // Match new position
+                    const oppPaddleRestRot = new pc.Vec3(15, 0, 10);
+
+                    app.root.addChild(opponent);
+
+                    // --- Gameplay Entities ---
+
+                    // Ball
+                    const ball = new pc.Entity('Ball');
+                    ball.addComponent('render', { type: 'sphere' });
+                    ball.render.material = matBall;
+                    ball.setLocalScale(BALL_R * 2, BALL_R * 2, BALL_R * 2);
+                    ball.addComponent('collision', { type: 'sphere', radius: BALL_R });
+                    ball.addComponent('rigidbody', {
+                        type: 'dynamic',
+                        mass: 0.026,
+                        restitution: 0.8,
+                        linearDamping: 0.1,
+                        angularDamping: 0.1
+                    });
+                    ball.setPosition(0, 5, 0);
+                    ball.enabled = false; // Start hidden
+                    app.root.addChild(ball);
+
+                    // Paddle
+                    const paddle = new pc.Entity('Paddle');
+                    const paddleVis = new pc.Entity('PaddleVis');
+                    paddleVis.addComponent('render', { type: 'box' });
+                    paddleVis.setLocalScale(0.22, 0.38, 0.02);
+                    paddleVis.render.material = matPaddle;
+
+                    const paddleHandle = new pc.Entity('PaddleHandle');
+                    paddleHandle.addComponent('render', { type: 'cylinder' });
+                    paddleHandle.setLocalScale(0.04, 0.15, 0.04);
+                    paddleHandle.setLocalPosition(0, -0.26, 0);
+                    paddleHandle.render.material = matDark;
+
+                    paddle.addChild(paddleVis);
+                    paddle.addChild(paddleHandle);
+
+                    // Hit Box (Physics Only)
+                    // Much larger than visual
+                    paddle.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(0.3, 0.4, 0.1) });
+                    paddle.addComponent('rigidbody', { type: 'kinematic' });
+                    paddle.setPosition(0, 1, 6.5);
+                    paddle.enabled = false; // Only show while finger is on screen
+                    app.root.addChild(paddle);
+
+                    // --- Logic & State ---
+                    let gameState = 'IDLE'; // IDLE, SERVE, PLAY, RETURN
+                    let goodDrops = 0;
+                    let fairDrops = 0;
+                    let shortBalls = 0;
+                    let highBalls = 0;
+                    let ballHasBounced = false; // track if ball bounced this round
+                    let heightAtCrossing = -1; // NEW: Capture height when it reaches opponent
+
+                    let lastMouseY = 0;
+                    let lastPaddlePos = new pc.Vec3();
+                    let playerHasHit = false; // track if player has returned the ball
+                    const OPP_KITCHEN_Z = -2.13;
+                    const OPP_SPEED = 6; // Increased from 4 to ensure he reaches high balls
+                    let oppTargetX = 0;
+                    let smashSize = 1.0; // Dynamic scale multiplier for smashes
+
+                    // UI Helpers
+                    const msgEl = document.getElementById('message');
+                    const showMsg = (txt, type = '', stay = false) => {
+                        msgEl.innerText = txt;
+                        msgEl.className = type; // Reset classes to just the type
+                        // Force a reflow to restart animation if needed
+                        msgEl.offsetHeight;
+                        msgEl.classList.add('show');
+                        if (!stay) {
+                            setTimeout(() => msgEl.classList.remove('show'), 1500);
+                        }
+                    };
+                    const updateScoreUI = () => {
+                        document.getElementById('good-score').innerText = goodDrops;
+                        document.getElementById('fair-score').innerText = fairDrops;
+                        document.getElementById('short-score').innerText = shortBalls;
+                        document.getElementById('high-score').innerText = highBalls;
+                    };
+                    showMsg('Click to Start', '', true);
+
+                    // Game Loop
+                    const resetBall = () => {
+                        ball.rigidbody.teleport(0, 10, 0);
+                        ball.rigidbody.linearVelocity = pc.Vec3.ZERO;
+                        ball.rigidbody.angularVelocity = pc.Vec3.ZERO;
+                        ball.enabled = false;
+                        playerHasHit = false;
+                        ballHasBounced = false;
+                        heightAtCrossing = -1; // Reset crossing height
+                        smashSize = 1.0; // RESET ball size to normal for next serve
+                    };
+
+                    const serve = () => {
+                        msgEl.classList.remove('show'); // Hide 'Click to Start'
+                        gameState = 'PLAY';
+                        playerHasHit = false;
+                        ball.enabled = true;
+
+                        // RESET OPPONENT to middle for each serve
+                        opponent.setPosition(0, 0, OPP_KITCHEN_Z);
+                        oppTargetX = 0;
+
+                        // Serve from opponent at kitchen line
+                        const oppPos = opponent.getPosition();
+                        ball.rigidbody.teleport(oppPos.x, 1.3, oppPos.z);
+                        ball.rigidbody.activate();
+
+                        // Aim straight at the player (camera z~9, paddle z~6.5)
+                        // Moderate arc toward center of player's court - one clean bounce
+                        const vz = 6 + Math.random() * 3; // Balanced: 6-9 for good distance without being too long
+                        const vy = 2.5 + Math.random() * 1.5; // Balanced: 2.5-4 for proper arc
+                        const vx = (Math.random() - 0.5) * 0.5; // very little lateral drift
+
+                        ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
+                        ball.rigidbody.angularVelocity = new pc.Vec3(10, 0, 0); // Gentle topspin for player
+                        document.getElementById('hint').style.opacity = 0;
+                    };
+
+                    // --- Global Menu Methods ---
+                    window.togglePause = () => {
+                        const btn = document.getElementById('toggle-pause-btn');
+                        if (app.timeScale === 1) {
+                            app.timeScale = 0;
+                            btn.setAttribute('data-state', 'paused');
+                        } else {
+                            app.timeScale = 1;
+                            btn.setAttribute('data-state', 'playing');
+                        }
+                    };
+
+                    window.restartGame = () => {
+                        goodDrops = 0;
+                        fairDrops = 0;
+                        shortBalls = 0;
+                        highBalls = 0;
+                        updateScoreUI();
+
+                        // Force resume if paused
+                        app.timeScale = 1;
+                        document.getElementById('toggle-pause-btn').setAttribute('data-state', 'playing');
+
+                        // Stop current round and serve fresh
+                        gameState = 'IDLE';
+                        resetBall();
+                        setTimeout(() => { if (gameState === 'IDLE') serve(); }, 500);
+                        showMsg('RESTARTED', 'short');
+                    };
+
+                    // Opponent smash - sends ball back hard + animate
+                    const opponentSmash = () => {
+                        gameState = 'RETURN';
+                        smashAnimT = 0; // start smash animation
+
+                        // Teleport ball to opponent paddle for visual impact
+                        const oppPos = opponent.getPosition();
+                        ball.rigidbody.teleport(oppPos.x - 0.5, 1.5, oppPos.z + 0.2); // Match paddle position (left side)
+                        ball.rigidbody.activate();
+
+                        // Delay the actual hit to sync with swing contact
+                        setTimeout(() => {
+                            if (gameState !== 'RETURN') return;
+                            // MONSTER SMASH: Terrifyingly fast and aggressive
+                            const vz = 30 + Math.random() * 10; // SCARY FAST: 30-40
+                            const vy = -10 + Math.random() * 5; // EXTREMELY STEEP: -10 to -5
+                            const vx = (Math.random() - 0.5) * 5;
+                            smashSize = 2.5; // Make the ball look MASSIVE
+                            ball.rigidbody.activate();
+                            ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
+                            ball.rigidbody.angularVelocity = new pc.Vec3(-80, 0, 0); // Extreme spin
+                        }, 100);
+                    };
+
+                    // Paddle Control
+                    // We need a plane to raycast against at Z=6.5
+                    // Z-plane at 6.5 facing Z axis
+                    const controlPlanePoint = new pc.Vec3(0, 0, 6.5);
+                    const controlPlaneNormal = new pc.Vec3(0, 0, 1);
+
+                    const ray = new pc.Ray();
+                    const hitPoint = new pc.Vec3();
+
+                    // Hit Zone: extremely generous - ball just needs to be on player's half
+                    const canHit = (ballWorldPos) => {
+                        return ballWorldPos.z > 0 && ballWorldPos.y > -0.5;
+                    };
+
+                    let swipeStartPos = new pc.Vec2();
+                    let swipeStartTime = 0;
+                    let isSwiping = false;
+
+                    // Input Listeners for Swipe
+                    window.addEventListener('pointerdown', (e) => {
+                        paddle.enabled = true;
+                        if (gameState === 'IDLE') {
+                            serve();
+                        } else if (gameState === 'PLAY') {
+                            isSwiping = true;
+                            swipeStartTime = performance.now();
+                            swipeStartPos.set(e.clientX, e.clientY);
+                        }
+                    });
+
+                    window.addEventListener('pointerup', (e) => {
+                        paddle.enabled = false;
+                        if (!isSwiping || gameState !== 'PLAY') return;
+                        isSwiping = false;
+
+                        const ballPos = ball.getPosition();
+
+                        // Check Hit Zone
+                        if (canHit(ballPos)) {
+                            playerHasHit = true;
+                            const dt = (performance.now() - swipeStartTime) / 1000;
+                            const dx = e.clientX - swipeStartPos.x;
+                            const dy = swipeStartPos.y - e.clientY; // Up is positive
+
+                            // Calculate Speed (px/s)
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            const speed = dist / Math.max(dt, 0.01);
+
+                            // Swipe speed determines shot arc
+                            // Slow swipe = low soft drop, fast swipe = high powerful shot
+                            const intensity = Math.min(1, Math.max(0, (speed - 50) / 1200));
+
+                            // More arc on all shots: high base speedY for nice visible arc
+                            // Gentle = just clears net with soft arc, fast = high lob
+                            const speedZ = 6 + intensity * 8;
+                            const speedY = 4 + intensity * 6;
+
+                            // Steering based on swipe X direction
+                            const steerX = dx / window.innerWidth * 6;
+
+                            ball.rigidbody.activate();
+                            ball.rigidbody.linearVelocity = new pc.Vec3(
+                                steerX,
+                                Math.min(speedY, 10),
+                                -Math.min(speedZ, 15)
+                            );
+                            ball.rigidbody.angularVelocity = new pc.Vec3(intensity * 10, 0, 0);
+                        }
+                    });
+
+                    // Custom Input Handling for Raycast
+                    window.addEventListener('pointermove', (e) => {
+                        // Convert to -1..1
+                        const x = (e.clientX / window.innerWidth) * 2 - 1;
+                        const y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                        // Update Camera Look slightly
+                        camera.lookAt(x * 0.5, 0.8 + y * 0.5, 0);
+
+                        // Raycast for Paddle
+                        const start = new pc.Vec3();
+                        const end = new pc.Vec3();
+                        camera.camera.screenToWorld(e.clientX, e.clientY, camera.camera.nearClip, start);
+                        camera.camera.screenToWorld(e.clientX, e.clientY, camera.camera.farClip, end);
+
+                        ray.origin.copy(start);
+                        ray.direction.copy(end).sub(start).normalize();
+
+                        // Manual Ray-Plane Intersection
+                        // t = ((planePoint - rayOrigin) . planeNormal) / (rayDir . planeNormal)
+                        const denom = ray.direction.dot(controlPlaneNormal);
+                        if (Math.abs(denom) > 1e-6) {
+                            const vec = new pc.Vec3().sub2(controlPlanePoint, ray.origin);
+                            const t = vec.dot(controlPlaneNormal) / denom;
+
+                            if (t >= 0) {
+                                hitPoint.copy(ray.origin).add(ray.direction.clone().scale(t));
+
+                                // Clamp
+                                const px = pc.math.clamp(hitPoint.x, -COURT_W / 2 - 0.5, COURT_W / 2 + 0.5);
+                                const py = pc.math.clamp(hitPoint.y, 0.2, 2.5);
+
+                                lastPaddlePos.copy(paddle.getPosition());
+                                paddle.rigidbody.teleport(px, py, 6.5);
+
+                                // Visual Tilt
+                                paddle.setLocalEulerAngles(-10 + py * 5, px * 10, 0);
+
+                                lastMouseY = py; // Store World Y for speed calc
+                            }
+                        }
+                    });
+
+                    // Game Loop Logic
+                    const KITCHEN_Z = -2.13;
+                    const OPP_REACH_HEIGHT = 1.6; // head height - only smash if ball is this high or above
+                    const NEXT_BALL_DELAY = 1200; // ms before next serve - adjusted for better pacing
+
+                    const endRound = () => {
+                        gameState = 'IDLE';
+                        resetBall();
+                        setTimeout(() => { if (gameState === 'IDLE') serve(); }, NEXT_BALL_DELAY);
+                    };
+
+                    app.on('update', (dt) => {
+                        const bPos = ball.getPosition();
+                        const bVel = ball.rigidbody.linearVelocity;
+
+                        // --- Smash animation ---
+                        if (smashAnimT >= 0) {
+                            smashAnimT += dt;
+                            const t = Math.min(smashAnimT / SMASH_DURATION, 1);
+
+                            if (t < 0.3) {
+                                // Wind up: arm goes back and up
+                                const w = t / 0.3;
+                                oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y + w * 0.6, oppArmRestPos.z - w * 0.4);
+                                oppArmR.setLocalEulerAngles(oppArmRestRot.x - 90 * w, oppArmRestRot.y, oppArmRestRot.z + 30 * w);
+                                oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y + w * 0.7, oppPaddleRestPos.z - w * 0.5);
+                                oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x - 110 * w, oppPaddleRestRot.y, oppPaddleRestRot.z + 15 * w);
+                            } else {
+                                // Swing down HARD: explosive forward smash
+                                const s = (t - 0.3) / 0.7;
+                                const ease = 1 - Math.pow(1 - s, 2);
+                                oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y + 0.6 - ease * 0.8, oppArmRestPos.z - 0.4 + ease * 0.7);
+                                oppArmR.setLocalEulerAngles(oppArmRestRot.x - 90 + ease * 130, oppArmRestRot.y, oppArmRestRot.z + 30 - ease * 30);
+                                oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y + 0.7 - ease * 0.9, oppPaddleRestPos.z - 0.5 + ease * 0.8);
+                                oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x - 110 + ease * 140, oppPaddleRestRot.y, oppPaddleRestRot.z + 15 - ease * 20);
+                            }
+
+                            if (t >= 1) {
+                                // Reset to rest pose
+                                smashAnimT = -1;
+                                oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y, oppArmRestPos.z);
+                                oppArmR.setLocalEulerAngles(oppArmRestRot.x, oppArmRestRot.y, oppArmRestRot.z);
+                                oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y, oppPaddleRestPos.z);
+                                oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x, oppPaddleRestRot.y, oppPaddleRestRot.z);
+                            }
+                        }
+
+                        // --- Opponent AI: track ball laterally ---
+                        if (ball.enabled) {
+                            if (bVel.z < 0) {
+                                oppTargetX = bPos.x;
+                            }
+                            const oppPos = opponent.getPosition();
+                            const dx = oppTargetX - oppPos.x;
+                            const moveX = Math.sign(dx) * Math.min(Math.abs(dx), OPP_SPEED * dt);
+                            opponent.setPosition(
+                                pc.math.clamp(oppPos.x + moveX, -COURT_W / 2 + 0.3, COURT_W / 2 - 0.3),
+                                0,
+                                OPP_KITCHEN_Z
+                            );
+                        }
+
+                        if ((gameState === 'PLAY' || gameState === 'RETURN') && ball.enabled) {
+                            // Ball growing effect (perspective + smash effect)
+                            if (smashSize > 1.0) smashSize -= dt * 0.5; // slowly return to normal size
+                            const scale = (1 + pc.math.clamp((bPos.z + 7) / 14, 0, 1) * 0.8) * smashSize;
+                            ball.setLocalScale(BALL_R * 2 * scale, BALL_R * 2 * scale, BALL_R * 2 * scale);
+
+                            // --- Shot categorization (after player has hit) ---
+                            if (playerHasHit && gameState === 'PLAY') {
+
+                                // --- SHORT DETECTION (IMMEDIATE) ---
+                                // 1. Bouncing on player's side after hit
+                                const bouncesOnPlayerSide = (bPos.z > 0.2 && bPos.y < 0.25 && bVel.y < 0);
+                                // 2. Ball moving backwards away from net on player's side
+                                const movingWrongWay = (bPos.z > 0.5 && bVel.z > 2);
+
+                                if (bouncesOnPlayerSide || movingWrongWay) {
+                                    shortBalls++;
+                                    updateScoreUI();
+                                    showMsg('SHORT!', 'short');
+                                    endRound();
+                                    return;
+                                }
+
+                                // 3. Ball hit the net and bouncing back
+                                if (bPos.z > 0.3 && bPos.z < 2 && bVel.z > 0 && bVel.z < 3) {
+                                    shortBalls++;
+                                    updateScoreUI();
+                                    showMsg('SHORT!', 'short');
+                                    endRound();
+                                    return;
+                                }
+
+                                // Ball crossed the net (z < 0)
+                                if (bPos.z < -0.3) {
+                                    // 1. Capture height as it reaches the opponent's strike zone (z = -2.0)
+                                    if (bPos.z <= -2.0 && heightAtCrossing === -1) {
+                                        heightAtCrossing = bPos.y;
+                                    }
+
+                                    // 2. ABSOLUTE HIGH BALL RULE: If un-bounced and above Waist (1.2m) in strike zone
+                                    if (!ballHasBounced && bPos.z <= -2.1 && bPos.y >= 1.2) {
+                                        highBalls++;
+                                        updateScoreUI();
+                                        showMsg('HIGH BALL!', 'high');
+
+                                        // SNAP opponent to ball for guaranteed smash
+                                        const currentPos = opponent.getPosition();
+                                        opponent.setPosition(bPos.x + 0.5, 0, currentPos.z);
+
+                                        opponentSmash();
+                                        playerHasHit = false;
+                                        return;
+                                    }
+
+                                    // 3. Check for bounce (Categorize Good vs Fair based on crossing height)
+                                    const hitGround = (bPos.y < 0.25 && bVel.y < 0);
+                                    if ((hitGround || bPos.y < 0.1) && !ballHasBounced) {
+                                        ballHasBounced = true;
+
+                                        // If it hit the ground behind the opponent un-smashed, it was too low to be a High Ball
+                                        // but we still check if it's in or out
+                                        if (bPos.z > -COURT_L / 2) {
+                                            const h = (heightAtCrossing === -1) ? bPos.y : heightAtCrossing;
+
+                                            if (h < 0.5) { // Below Knee (0.5m)
+                                                goodDrops++;
+                                                showMsg('GOOD DROP!', 'good');
+                                            } else { // Between Knee and Waist (0.5m - 1.2m)
+                                                fairDrops++;
+                                                showMsg('FAIR DROP!', 'fair');
+                                            }
+                                            updateScoreUI();
+                                            endRound();
+                                            return;
+                                        } else {
+                                            // Ball went un-bounced past baseline (Too Deep / Long)
+                                            highBalls++;
+                                            updateScoreUI();
+                                            showMsg('TOO DEEP!', 'high');
+                                            endRound();
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Ball out of bounds or fell through - end quickly
+                            if (Math.abs(bPos.z) > 12 || bPos.y < -0.5) {
+                                endRound();
+                            }
+                        }
+                    });
+
+                    console.log('[PocketPickleball] Game setup complete');
+
+                } catch (err) {
+                    console.error('[PocketPickleball] Init error:', err);
+                    document.getElementById('message').innerText = 'Error: ' + err.message;
+                    document.getElementById('message').classList.add('show');
+                }
+            }
+        })();
+    </script>
+</body>
+
+</html>
