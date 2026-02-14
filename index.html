@@ -48,23 +48,57 @@
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
         }
 
-        #score-board {
+        #scoreboard {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
             display: flex;
-            gap: 40px;
-            font-size: 24px;
-            font-weight: 700;
-            letter-spacing: 1px;
+            gap: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px 25px;
+            border-radius: 40px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            z-index: 100;
+            font-size: 0.9em;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
         }
 
-        .score-unit {
+        .score-item {
             text-align: center;
         }
 
+        .score-val {
+            display: block;
+            font-size: 1.6em;
+            font-weight: bold;
+            color: #fff;
+        }
+
         .score-label {
-            font-size: 12px;
-            opacity: 0.6;
+            font-size: 0.7em;
             text-transform: uppercase;
-            margin-bottom: 5px;
+            letter-spacing: 1px;
+            color: #aaa;
+        }
+
+        .score-val.good {
+            color: #4CAF50;
+        }
+
+        .score-val.fair {
+            color: #8BC34A;
+        }
+
+        .score-val.short {
+            color: #FFC107;
+        }
+
+        .score-val.high {
+            color: #F44336;
         }
 
         #message {
@@ -102,15 +136,22 @@
     <canvas id="application"></canvas>
 
     <div id="ui">
-        <div id="score-board" class="glass">
-            <div class="score-unit">
-                <div class="score-label">Good Drops</div>
-                <div id="good-score">0</div>
+        <div id="scoreboard">
+            <div class="score-item">
+                <span class="score-label">Good Drops</span>
+                <span id="good-score" class="score-val good">0</span>
             </div>
-            <div style="width: 1px; background: rgba(255,255,255,0.2);"></div>
-            <div class="score-unit">
-                <div class="score-label">Misses</div>
-                <div id="miss-score">0</div>
+            <div class="score-item">
+                <span class="score-label">Fair Drops</span>
+                <span id="fair-score" class="score-val fair">0</span>
+            </div>
+            <div class="score-item">
+                <span class="score-label">Shorts</span>
+                <span id="short-score" class="score-val short">0</span>
+            </div>
+            <div class="score-item">
+                <span class="score-label">High Ball</span>
+                <span id="high-score" class="score-val high">0</span>
             </div>
         </div>
 
@@ -477,7 +518,11 @@
 
                     // --- Logic & State ---
                     let gameState = 'IDLE'; // IDLE, SERVE, PLAY, RETURN
-                    let goodDrops = 0, misses = 0;
+                    let goodDrops = 0;
+                    let fairDrops = 0;
+                    let shortBalls = 0;
+                    let highBalls = 0;
+
                     let lastMouseY = 0;
                     let lastPaddlePos = new pc.Vec3();
                     let playerHasHit = false; // track if player has returned the ball
@@ -495,7 +540,9 @@
                     };
                     const updateScoreUI = () => {
                         document.getElementById('good-score').innerText = goodDrops;
-                        document.getElementById('miss-score').innerText = misses;
+                        document.getElementById('fair-score').innerText = fairDrops;
+                        document.getElementById('short-score').innerText = shortBalls;
+                        document.getElementById('high-score').innerText = highBalls;
                     };
                     showMsg('READY?');
 
@@ -545,14 +592,14 @@
                         // Delay the actual hit to sync with swing contact
                         setTimeout(() => {
                             if (gameState !== 'RETURN') return;
-                            // MONSTER SMASH: Scary fast, STEEP downward angle
-                            const vz = 25 + Math.random() * 10; // SCARY FAST: 25-35
-                            const vy = -8 + Math.random() * 4; // VERY STEEP: -8 to -4
-                            const vx = (Math.random() - 0.5) * 4;
-                            smashSize = 2.0; // Make the ball look HUGE and scary
+                            // MONSTER SMASH: Terrifyingly fast and aggressive
+                            const vz = 30 + Math.random() * 10; // SCARY FAST: 30-40
+                            const vy = -10 + Math.random() * 5; // EXTREMELY STEEP: -10 to -5
+                            const vx = (Math.random() - 0.5) * 5;
+                            smashSize = 2.5; // Make the ball look MASSIVE
                             ball.rigidbody.activate();
                             ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
-                            ball.rigidbody.angularVelocity = new pc.Vec3(-60, 0, 0); // Extreme topspin
+                            ball.rigidbody.angularVelocity = new pc.Vec3(-80, 0, 0); // Extreme spin
                         }, 100);
                     };
 
@@ -743,7 +790,7 @@
                                 // SHORT: ball bouncing/rolling on player's side (never reached net)
                                 // Catch this early to avoid waiting for rolling balls
                                 if (bPos.z > 2 && bVel.z < 2 && bPos.y < 0.8) {
-                                    misses++;
+                                    shortBalls++;
                                     updateScoreUI();
                                     showMsg('SHORT!');
                                     endRound();
@@ -752,7 +799,7 @@
 
                                 // SHORT: ball hit the net and bouncing back
                                 if (bPos.z > 0.3 && bPos.z < 2 && bVel.z > 0 && bVel.z < 3) {
-                                    misses++;
+                                    shortBalls++;
                                     updateScoreUI();
                                     showMsg('SHORT!');
                                     endRound();
@@ -761,33 +808,54 @@
 
                                 // Ball crossed the net (z < 0)
                                 if (bPos.z < -0.3) {
-                                    // GOOD DROP: ball is descending and low in kitchen zone (check FIRST before "too high")
-                                    if (bPos.z > KITCHEN_Z && bPos.y < NET_H + 0.6 && bVel.y < 0) {
-                                        goodDrops++;
-                                        updateScoreUI();
-                                        showMsg('GOOD DROP!');
-                                        endRound();
-                                        return;
+                                    // 1. Check for ball bounce first
+                                    // Bouncing in kitchen results in either a "Good Drop" or a "Fair Drop"
+                                    const hasBounced = (bPos.y < 0.18 && bVel.y < 0);
+
+                                    if (hasBounced) {
+                                        if (bPos.z > KITCHEN_Z) {
+                                            // DISTINGUISH Good vs Fair
+                                            // Good: Bounced early (opponent didn't even try to reach)
+                                            // Fair: Bounced late in striking zone (opponent tried to smash but failed)
+                                            if (bPos.z > -1.8) {
+                                                goodDrops++;
+                                                showMsg('GOOD DROP!');
+                                            } else {
+                                                fairDrops++;
+                                                showMsg('FAIR DROP!');
+                                            }
+                                            updateScoreUI();
+                                            endRound();
+                                            return;
+                                        } else {
+                                            // Bounced deep - counts toward High Ball (for simplicity of the stats requested)
+                                            highBalls++;
+                                            updateScoreUI();
+                                            showMsg('TOO DEEP!');
+                                            endRound();
+                                            return;
+                                        }
                                     }
 
-                                    // Check for high balls or deep balls
-                                    const isTooHigh = bPos.y > NET_H + 0.6;
-                                    const isTooDeep = bPos.z <= KITCHEN_Z;
+                                    // 2. Check for interception by the opponent (The "Smash" condition)
+                                    // If it reaches the opponent un-bounced and is "High", it's a High Ball fail
+                                    if (bPos.z < -1.8) {
+                                        const isTooHigh = bPos.y > NET_H + 0.6;
+                                        const isTooDeep = bPos.z < KITCHEN_Z - 0.3;
 
-                                    if (isTooHigh || isTooDeep) {
-                                        // Opponent ALWAYS smashes high or deep balls
-                                        misses++;
-                                        updateScoreUI();
-                                        showMsg(isTooHigh ? 'TOO HIGH!' : 'TOO DEEP!');
+                                        if (isTooHigh || isTooDeep) {
+                                            highBalls++;
+                                            updateScoreUI();
+                                            showMsg(isTooHigh ? 'HIGH BALL!' : 'TOO DEEP!');
 
-                                        // Snap opponent to intercept the ball for the smash
-                                        // paddle is at -0.5 relative to opponent center, so we offset pos
-                                        const currentPos = opponent.getPosition();
-                                        opponent.setPosition(bPos.x + 0.5, currentPos.y, currentPos.z);
+                                            // Guaranteed interception: Snap opponent to the ball
+                                            const currentPos = opponent.getPosition();
+                                            opponent.setPosition(bPos.x + 0.5, currentPos.y, currentPos.z);
 
-                                        opponentSmash();
-                                        playerHasHit = false;
-                                        return;
+                                            opponentSmash();
+                                            playerHasHit = false;
+                                            return;
+                                        }
                                     }
                                 }
                             }
