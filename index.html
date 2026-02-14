@@ -519,9 +519,9 @@
                         // Delay the actual hit to sync with swing contact
                         setTimeout(() => {
                             if (gameState !== 'RETURN') return;
-                            // BIG SMASH: fast, high, and dramatic
-                            const vz = 16 + Math.random() * 6; // Increased from 10-14 to 16-22 for speed
-                            const vy = 4 + Math.random() * 3; // Increased from 1-1.5 to 4-7 for big bounce
+                            // BIG SMASH: goes DOWN hard, then bounces back HIGH
+                            const vz = 16 + Math.random() * 6; // Fast forward speed: 16-22
+                            const vy = -2 + Math.random() * 3; // Downward to neutral: -2 to 1 (hits court and bounces HIGH)
                             const vx = (Math.random() - 0.5) * 3; // Increased lateral variation
                             ball.rigidbody.activate();
                             ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
@@ -723,22 +723,22 @@
 
                                 // Ball crossed the net (z < 0)
                                 if (bPos.z < -0.3) {
-                                    // TOO HIGH: ball is above opponent head height
-                                    if (bPos.y > OPP_REACH_HEIGHT) {
+                                    // GOOD DROP: ball is descending and low in kitchen zone (check FIRST before "too high")
+                                    if (bPos.z > KITCHEN_Z && bPos.y < NET_H + 0.6 && bVel.y < 0) {
+                                        goodDrops++;
+                                        updateScoreUI();
+                                        showMsg('GOOD DROP!');
+                                        endRound();
+                                        return;
+                                    }
+
+                                    // TOO HIGH: ball is above good drop height
+                                    if (bPos.y > NET_H + 0.6) {
                                         misses++;
                                         updateScoreUI();
                                         showMsg('TOO HIGH!');
                                         opponentSmash();
                                         playerHasHit = false;
-                                        return;
-                                    }
-
-                                    // GOOD DROP: ball is descending and low in kitchen zone
-                                    if (bPos.z > KITCHEN_Z && bPos.y < NET_H + 0.3 && bVel.y < 0) {
-                                        goodDrops++;
-                                        updateScoreUI();
-                                        showMsg('GOOD DROP!');
-                                        endRound();
                                         return;
                                     }
 
