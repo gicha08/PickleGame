@@ -417,8 +417,8 @@
                     const oppPaddle = new pc.Entity('OppPaddle');
                     oppPaddle.addComponent('render', { type: 'box' });
                     oppPaddle.setLocalScale(0.22, 0.35, 0.02);
-                    oppPaddle.setLocalPosition(0.5, 0.58, 0.18);
-                    oppPaddle.setLocalEulerAngles(15, 0, -10);
+                    oppPaddle.setLocalPosition(-0.5, 1.4, 0.18); // LEFT side (opp's right), shoulder height
+                    oppPaddle.setLocalEulerAngles(15, 0, 10); // Adjusted angle for left side
                     oppPaddle.render.material = matPaddle;
                     opponent.addChild(oppPaddle);
 
@@ -427,14 +427,15 @@
                     const SMASH_DURATION = 0.25; // fast aggressive swing
                     const oppArmRestPos = new pc.Vec3(0.42, 1.0, 0);
                     const oppArmRestRot = new pc.Vec3(0, 0, -20);
-                    const oppPaddleRestPos = new pc.Vec3(0.5, 0.58, 0.18);
-                    const oppPaddleRestRot = new pc.Vec3(15, 0, -10);
+                    const oppPaddleRestPos = new pc.Vec3(-0.5, 1.4, 0.18); // Match new position
+                    const oppPaddleRestRot = new pc.Vec3(15, 0, 10);
 
                     app.root.addChild(opponent);
 
                     // --- Gameplay Entities ---
 
                     // Ball
+                    const ball = new pc.Entity('Ball');
                     ball.addComponent('render', { type: 'sphere' });
                     ball.render.material = matBall;
                     ball.setLocalScale(BALL_R * 2, BALL_R * 2, BALL_R * 2);
@@ -532,7 +533,7 @@
 
                         // Teleport ball to opponent paddle for visual impact
                         const oppPos = opponent.getPosition();
-                        ball.rigidbody.teleport(oppPos.x + 0.3, 1.5, oppPos.z + 0.2);
+                        ball.rigidbody.teleport(oppPos.x - 0.5, 1.5, oppPos.z + 0.2); // Match paddle position (left side)
                         ball.rigidbody.activate();
 
                         // Delay the actual hit to sync with swing contact
