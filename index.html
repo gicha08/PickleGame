@@ -152,8 +152,8 @@
         const ballMat = new CANNON.Material('ball');
         const courtMat = new CANNON.Material('court');
         const paddleMat = new CANNON.Material('paddle');
-        world.addContactMaterial(new CANNON.ContactMaterial(ballMat, courtMat, { friction: 0.1, restitution: 0.7 }));
-        world.addContactMaterial(new CANNON.ContactMaterial(ballMat, paddleMat, { friction: 0.4, restitution: 0.9 }));
+        world.addContactMaterial(new CANNON.ContactMaterial(ballMat, courtMat, { friction: 0.0, restitution: 0.85 }));
+        world.addContactMaterial(new CANNON.ContactMaterial(ballMat, paddleMat, { friction: 0.2, restitution: 0.8 }));
 
         // --- Lights ---
         const ambient = new THREE.AmbientLight(0xffffff, 0.4);
@@ -179,6 +179,7 @@
         const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
         const floor = new THREE.Mesh(floorGeo, floorMat);
         floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -0.1; // Lowered significantly to avoid z-fighting
         floor.receiveShadow = true;
         scene.add(floor);
 
@@ -189,7 +190,7 @@
             new THREE.MeshStandardMaterial({ color: 0x24628a, roughness: 0.9 })
         );
         courtSurface.rotation.x = -Math.PI / 2;
-        courtSurface.position.y = 0.005; // Slightly raised to prevent z-fighting with floor
+        courtSurface.position.y = 0.0; // At zero
         courtSurface.receiveShadow = true;
         courtGroup.add(courtSurface);
 
@@ -200,7 +201,7 @@
             const l = new THREE.Mesh(new THREE.PlaneGeometry(w, h), lineMat);
             l.rotation.x = -Math.PI / 2;
             l.rotation.z = rot;
-            l.position.set(x, 0.02, z); // Raised further to clear court surface
+            l.position.set(x, 0.02, z);
             courtGroup.add(l);
         };
         addLine(COURT_W, 0.05, 0, COURT_L / 2);     // Baseline near
@@ -237,7 +238,7 @@
         );
         ballMesh.castShadow = true;
         scene.add(ballMesh);
-        const ballBody = new CANNON.Body({ mass: 0.026, shape: new CANNON.Sphere(BALL_R), material: ballMat, linearDamping: 0.05 });
+        const ballBody = new CANNON.Body({ mass: 0.026, shape: new CANNON.Sphere(BALL_R), material: ballMat, linearDamping: 0.1 });
         world.addBody(ballBody);
         const resetBall = () => { ballBody.position.set(0, 10, 0); ballBody.velocity.set(0, 0, 0); ballBody.sleep(); };
         resetBall();
@@ -252,7 +253,15 @@
         paddleGroup.add(handle);
         scene.add(paddleGroup);
 
-        const paddleBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: paddleMat, shape: new CANNON.Box(new CANNON.Vec3(PADDLE_W / 2, PADDLE_H / 2 + 0.07, 0.02)) });
+        // Physics body is much larger than visual mesh for generous hit zone
+        // Visual width: PADDLE_W (0.22), Physics width: 0.6 (approx 3x)
+        // Visual height: PADDLE_H (0.38), Physics height: 0.6 (approx 1.5x)
+        const paddleBody = new CANNON.Body({
+            mass: 0,
+            type: CANNON.Body.KINEMATIC,
+            material: paddleMat,
+            shape: new CANNON.Box(new CANNON.Vec3(0.3, 0.4, 0.1)) // Large hit box
+        });
         world.addBody(paddleBody);
 
         // Opponent (Simulated dummy)
@@ -275,10 +284,11 @@
             gameState = 'PLAY';
             resetBall();
             ballBody.wakeUp();
-            ballBody.position.set((Math.random() - 0.5) * 3, 1.5, -COURT_L / 2);
+            // Serve from just in front of opponent (opp z is approx -7.2)
+            ballBody.position.set((Math.random() - 0.5) * 3, 1.5, -6.5);
             // Dynamic serve speed based on difficulty or random
-            const vz = 6 + Math.random() * 3;
-            const vy = 4 + Math.random() * 2;
+            const vz = 7 + Math.random() * 3; // Ensure it reaches player
+            const vy = 3 + Math.random() * 2;
             const vx = (Math.random() - 0.5) * 2;
             ballBody.velocity.set(vx, vy, vz);
             document.getElementById('hint').style.opacity = 0;
