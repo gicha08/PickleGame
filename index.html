@@ -4,13 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pocket Pickleball Pro 3D</title>
+    <title>Pocket Pickleball (PlayCanvas)</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background: #0a0a0a;
             font-family: 'Outfit', sans-serif;
+        }
+
+        #application {
+            width: 100%;
+            height: 100%;
+            display: block;
         }
 
         #ui {
@@ -78,18 +84,20 @@
             font-size: 18px;
             opacity: 0.8;
             transition: opacity 0.5s;
-        }
-
-        canvas {
-            display: block;
-            touch-action: none;
-            cursor: crosshair;
+            text-align: center;
         }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <!-- PlayCanvas Engine -->
+    <script src="https://code.playcanvas.com/playcanvas-stable.min.js"></script>
+    <!-- Ammo.js Physics -->
+    <script src="https://code.playcanvas.com/ammo.751ec5f.js"></script>
 </head>
 
 <body>
+    <canvas id="application"></canvas>
+
     <div id="ui">
         <div id="score-board" class="glass">
             <div class="score-unit">
@@ -103,330 +111,445 @@
             </div>
         </div>
 
-        <div id="message">Ready?</div>
-
-        <div id="hint" class="glass">Move mouse/finger to control paddle</div>
+        <div id="message">Loading...</div>
+        <div id="hint" class="glass">Swipe SLOW for Drop, FAST for Smash!</div>
     </div>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
-            }
-        }
-    </script>
-
-    <script type="module">
-        import * as THREE from 'three';
-        import * as CANNON from 'cannon-es';
-
-        // --- Config ---
-        const COURT_W = 6.1;
-        const COURT_L = 13.41;
-        const NET_H = 0.914;
-        const BALL_R = 0.07; // Increased size for visibility
-        const PADDLE_W = 0.22;
-        const PADDLE_H = 0.38;
-
-        // --- Setup Scene ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1c2c);
-        scene.fog = new THREE.FogExp2(0x1a1c2c, 0.04);
-
-        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 2.5, 9);
-        camera.lookAt(0, 0.8, 0);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        document.body.appendChild(renderer.domElement);
-
-        // --- Physics ---
-        const world = new CANNON.World();
-        world.gravity.set(0, -9.82, 0);
-        const ballMat = new CANNON.Material('ball');
-        const courtMat = new CANNON.Material('court');
-        const paddleMat = new CANNON.Material('paddle');
-        world.addContactMaterial(new CANNON.ContactMaterial(ballMat, courtMat, { friction: 0.05, restitution: 0.75 })); // Reduced restitution slightly to prevent "superball" effect
-        world.addContactMaterial(new CANNON.ContactMaterial(ballMat, paddleMat, { friction: 0.3, restitution: 0.8 }));
-
-        // --- Lights ---
-        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
-        scene.add(ambient);
-
-        const spot = new THREE.SpotLight(0xffffff, 100);
-        spot.position.set(5, 10, 5);
-        spot.angle = 0.5;
-        spot.penumbra = 0.5;
-        spot.castShadow = true;
-        spot.shadow.mapSize.width = 2048;
-        spot.shadow.mapSize.height = 2048;
-        spot.shadow.bias = -0.0001; // Reduce shadow acne/flickering
-        scene.add(spot);
-
-        const point = new THREE.PointLight(0x4488ff, 50);
-        point.position.set(-5, 5, -5);
-        scene.add(point);
-
-        // --- Environment ---
-        // Floor
-        const floorGeo = new THREE.CircleGeometry(40, 32);
-        const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
-        const floor = new THREE.Mesh(floorGeo, floorMat);
-        floor.rotation.x = -Math.PI / 2;
-        floor.position.y = -0.1; // Lowered significantly to avoid z-fighting
-        floor.receiveShadow = true;
-        scene.add(floor);
-
-        // Court
-        const courtGroup = new THREE.Group();
-        const courtSurface = new THREE.Mesh(
-            new THREE.PlaneGeometry(COURT_W, COURT_L),
-            new THREE.MeshStandardMaterial({ color: 0x24628a, roughness: 0.9 })
-        );
-        courtSurface.rotation.x = -Math.PI / 2;
-        courtSurface.position.y = 0.0; // At zero
-        courtSurface.receiveShadow = true;
-        courtGroup.add(courtSurface);
-
-        // Lines (Simplified)
-        const lineGeo = new THREE.PlaneGeometry(COURT_W, 0.05);
-        const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        const addLine = (w, h, x, z, rot = 0) => {
-            const l = new THREE.Mesh(new THREE.PlaneGeometry(w, h), lineMat);
-            l.rotation.x = -Math.PI / 2;
-            l.rotation.z = rot;
-            l.position.set(x, 0.02, z);
-            courtGroup.add(l);
-        };
-        addLine(COURT_W, 0.05, 0, COURT_L / 2);     // Baseline near
-        addLine(COURT_W, 0.05, 0, -COURT_L / 2);    // Baseline far
-        addLine(0.05, COURT_L, COURT_W / 2, 0);    // Sideline L
-        addLine(0.05, COURT_L, -COURT_W / 2, 0);   // Sideline R
-        addLine(COURT_W, 0.05, 0, 2.13);         // Kitchen near
-        addLine(COURT_W, 0.05, 0, -2.13);        // Kitchen far
-        addLine(0.05, COURT_L - 4.26, 0, 0);     // Mid line
-        scene.add(courtGroup);
-
-        const courtBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
-        courtBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-        world.addBody(courtBody);
-
-        // Net
-        const netGroup = new THREE.Group();
-        // Dense wireframe for better visibility (60x10 segments)
-        const netMesh = new THREE.Mesh(
-            new THREE.PlaneGeometry(COURT_W + 0.4, NET_H, 60, 10),
-            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 })
-        );
-        netMesh.position.y = NET_H / 2;
-        netGroup.add(netMesh);
-
-        // White tape on top
-        const tape = new THREE.Mesh(new THREE.BoxGeometry(COURT_W + 0.4, 0.05, 0.04), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-        tape.position.y = NET_H;
-        netGroup.add(tape);
-
-        // Black posts on sides
-        const postGeo = new THREE.CylinderGeometry(0.04, 0.04, NET_H + 0.05);
-        const postMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-        const postL = new THREE.Mesh(postGeo, postMat);
-        postL.position.set(-(COURT_W / 2 + 0.2), NET_H / 2, 0);
-        netGroup.add(postL);
-        const postR = postL.clone();
-        postR.position.set((COURT_W / 2 + 0.2), NET_H / 2, 0);
-        netGroup.add(postR);
-
-        scene.add(netGroup);
-        world.addBody(new CANNON.Body({ mass: 0, position: new CANNON.Vec3(0, NET_H / 2, 0), shape: new CANNON.Box(new CANNON.Vec3(COURT_W / 2, NET_H / 2, 0.02)) }));
-
-        // Ball
-        const ballMesh = new THREE.Mesh(
-            new THREE.SphereGeometry(BALL_R, 32, 32),
-            new THREE.MeshStandardMaterial({ color: 0xccff00, emissive: 0xccff00, emissiveIntensity: 0.2 })
-        );
-        ballMesh.castShadow = true;
-        scene.add(ballMesh);
-        const ballBody = new CANNON.Body({ mass: 0.026, shape: new CANNON.Sphere(BALL_R), material: ballMat, linearDamping: 0.1 });
-        world.addBody(ballBody);
-        const resetBall = () => { ballBody.position.set(0, 10, 0); ballBody.velocity.set(0, 0, 0); ballBody.sleep(); };
-        resetBall();
-
-        // Paddle
-        const paddleGroup = new THREE.Group();
-        const paddleFace = new THREE.Mesh(new THREE.BoxGeometry(PADDLE_W, PADDLE_H, 0.02), new THREE.MeshStandardMaterial({ color: 0xe63946 }));
-        paddleFace.castShadow = true;
-        paddleGroup.add(paddleFace);
-        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.15), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-        handle.position.y = -0.25;
-        paddleGroup.add(handle);
-        scene.add(paddleGroup);
-
-        // Physics body is much larger than visual mesh for generous hit zone
-        // Visual width: PADDLE_W (0.22), Physics width: 0.6 (approx 3x)
-        // Visual height: PADDLE_H (0.38), Physics height: 0.6 (approx 1.5x)
-        const paddleBody = new CANNON.Body({
-            mass: 0,
-            type: CANNON.Body.KINEMATIC,
-            material: paddleMat,
-            shape: new CANNON.Box(new CANNON.Vec3(0.3, 0.4, 0.1)) // Large hit box
-        });
-        world.addBody(paddleBody);
-
-        // Opponent (Simulated dummy)
-        const opp = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 1, 4, 8), new THREE.MeshStandardMaterial({ color: 0x457b9d }));
-        opp.position.set(0, 1, -COURT_L / 2 - 0.5);
-        scene.add(opp);
-
-        // --- Gameplay Logic ---
-        let gameState = 'IDLE';
-        let playerScore = 0, opponentScore = 0;
-        let lastPaddleY = 0;
-
-        const showMsg = (txt) => {
-            const el = document.getElementById('message');
-            el.innerText = txt; el.classList.add('show');
-            setTimeout(() => el.classList.remove('show'), 1500);
-        };
-
-        const serve = () => {
-            gameState = 'PLAY';
-            resetBall();
-            ballBody.wakeUp();
-            // Serve from just in front of opponent (opp z is approx -7.2)
-            ballBody.position.set((Math.random() - 0.5) * 3, 1.5, -6.5);
-            // Dynamic serve speed based on difficulty or random
-            const vz = 7 + Math.random() * 3; // Ensure it reaches player
-            const vy = 3 + Math.random() * 2;
-            const vx = (Math.random() - 0.5) * 2;
-            ballBody.velocity.set(vx, vy, vz);
-            document.getElementById('hint').style.opacity = 0;
-        };
-
-        // Collision callback
-        // Collision callback
-        ballBody.addEventListener('collide', (e) => {
-            if (e.body === paddleBody) {
-                // Precision Control Logic:
-                // Swipe speed (dy) determines shot type.
-                // 0.0 - 0.2: Drop Shot (Slow, moderate arc to clear net)
-                // > 0.2: Drive/Smash (Fast, flatter arc)
-
-                const dy = Math.max(0, (mouse.y - lastPaddleY) * 50);
-
-                let speedZ, speedY;
-
-                if (dy < 0.25) {
-                    // DROP SHOT
-                    // Low speed to just clear the net (7m distance)
-                    speedZ = 5 + (dy * 4); // Range: 5 to ~6
-                    speedY = 4.2; // High arc to clear net safely
-                    showMsg('DROP');
-                } else {
-                    // DRIVE / SMASH
-                    // Higher speed, trajectory flattens slightly with power
-                    speedZ = 8 + (dy * 5); // Range: 8 to 13+
-                    speedY = 3.5 + (dy * 1.5);
-                    showMsg(dy > 0.8 ? 'SMASH!' : 'DRIVE');
-                }
-
-                // Apply Velocity
-                // Note: Z is negative to go towards opponent
-                ballBody.velocity.z = -Math.min(speedZ, 15);
-                ballBody.velocity.y = Math.min(speedY, 8);
-
-                // Steering
-                ballBody.velocity.x = mouse.x * 4;
-            }
-        });
-
-        // Update Hint
-        document.getElementById('hint').innerText = "Swipe SLOW for Drop, FAST for Smash!";
-
-        // --- Controls ---
-        const mouse = new THREE.Vector2();
-        const raycaster = new THREE.Raycaster();
-        const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), -6.5);
-        const intersectPoint = new THREE.Vector3();
-
-        const updatePaddle = (x, y) => {
-            mouse.x = (x / window.innerWidth) * 2 - 1;
-            mouse.y = -(y / window.innerHeight) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-            raycaster.ray.intersectPlane(planeZ, intersectPoint);
-
-            const tx = THREE.MathUtils.clamp(intersectPoint.x, -COURT_W / 2 - 0.5, COURT_W / 2 + 0.5);
-            const ty = THREE.MathUtils.clamp(intersectPoint.y, 0.2, 2.5);
-
-            paddleBody.position.set(tx, ty, 6.5);
-            paddleGroup.position.copy(paddleBody.position);
-
-            // Visual tilt
-            paddleGroup.rotation.x = -0.2 + mouse.y * 0.3;
-            paddleGroup.rotation.y = mouse.x * 0.4;
-            paddleBody.quaternion.copy(paddleGroup.quaternion);
-
-            lastPaddleY = mouse.y;
-        };
-
-        window.addEventListener('pointermove', e => updatePaddle(e.clientX, e.clientY));
-        window.addEventListener('pointerdown', () => { if (gameState === 'IDLE') serve(); });
-
-        // --- Main Loop ---
-        function animate() {
-            requestAnimationFrame(animate);
-            world.step(1 / 60);
-
-            ballMesh.position.copy(ballBody.position);
-            ballMesh.quaternion.copy(ballBody.quaternion);
-
-            // Dynamic Ball Scaling
-            // Range: z = -7 (far) to +7 (near)
-            const z = ballBody.position.z;
-            const scale = 1 + Math.max(0, (z + 7) / 14) * 0.8;
-            ballMesh.scale.setScalar(scale);
-
-            // Bounds / Scoring
-            if (gameState === 'PLAY') {
-                if (ballBody.position.y < -0.5 || Math.abs(ballBody.position.z) > 15) {
-                    if (ballBody.position.z > 0) {
-                        opponentScore++;
-                        showMsg('OPPONENT POINT');
+    <script>
+        // Use an IIFE to keep global scope clean
+        (function () {
+            // Wait for Ammo to load
+            if (typeof Ammo !== 'undefined') {
+                initGame();
+            } else {
+                // If loaded via script tag async (though here it's sync), just in case
+                window.onload = function () {
+                    if (typeof Ammo !== 'undefined') {
+                        initGame();
                     } else {
-                        playerScore++;
-                        showMsg('PLAYER POINT');
+                        // Sometimes the WASM version needs explicit initialization
+                        Ammo().then(initGame);
                     }
-                    document.getElementById('player-score').innerText = playerScore;
-                    document.getElementById('opponent-score').innerText = opponentScore;
-                    gameState = 'IDLE';
-                    resetBall();
-                    setTimeout(() => { if (gameState === 'IDLE') serve(); }, 2000);
-                }
+                };
             }
 
-            // Slight camera follow
-            camera.position.x += (mouse.x * 0.5 - camera.position.x) * 0.05;
-            camera.lookAt(0, 0.8, 0);
+            function initGame() {
+                // --- Constants ---
+                const COURT_W = 6.1;
+                const COURT_L = 13.41;
+                const NET_H = 0.914;
+                const BALL_R = 0.07;
 
-            renderer.render(scene, camera);
-        }
+                // --- Create Application ---
+                const canvas = document.getElementById('application');
+                const app = new pc.Application(canvas, {
+                    mouse: new pc.Mouse(canvas),
+                    touch: new pc.TouchDevice(canvas),
+                    elementInput: new pc.ElementInput(canvas),
+                    keyboard: new pc.Keyboard(window)
+                });
+                app.start();
 
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+                // Set fill mode to fill the window
+                app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
+                app.setCanvasResolution(pc.RESOLUTION_AUTO);
 
-        // Initialize
-        showMsg('Ready?');
-        setTimeout(serve, 2000);
-        animate();
+                // Ensure canvas resizes when window changes
+                window.addEventListener('resize', () => app.resizeCanvas());
+
+                // --- Setup Scene ---
+                // Add Light
+                const light = new pc.Entity('DirectionalLight');
+                light.addComponent('light', {
+                    type: 'directional',
+                    color: new pc.Color(1, 1, 1),
+                    castShadows: true,
+                    intensity: 1.2,
+                    shadowBias: 0.2,
+                    normalOffsetBias: 0.05,
+                    shadowDistance: 20
+                });
+                light.setLocalEulerAngles(45, 30, 0);
+                app.root.addChild(light);
+
+                const ambient = new pc.Entity('AmbientLight');
+                ambient.addComponent('light', {
+                    type: 'point',
+                    color: new pc.Color(0.8, 0.8, 1),
+                    intensity: 0.5,
+                    range: 100
+                });
+                ambient.setPosition(0, 10, 0);
+                app.root.addChild(ambient);
+
+                // Add Camera
+                const camera = new pc.Entity('MainCamera');
+                camera.addComponent('camera', {
+                    clearColor: new pc.Color(0.1, 0.11, 0.17), // Dark blue-ish bg
+                    farClip: 100,
+                    fov: 60
+                });
+                camera.setPosition(0, 2.5, 9);
+                camera.lookAt(0, 0.8, 0);
+                app.root.addChild(camera);
+
+                // --- Materials ---
+                const createMaterial = (color) => {
+                    const material = new pc.StandardMaterial();
+                    material.diffuse = color;
+                    material.update();
+                    return material;
+                };
+                const matCourt = createMaterial(new pc.Color(0.14, 0.38, 0.54)); // 0x24628a
+                const matLine = createMaterial(new pc.Color(1, 1, 1));
+                const matNet = createMaterial(new pc.Color(1, 1, 1));
+                matNet.rollOffFactor = 0; // Simple wireframe-ish look
+                matNet.opacity = 0.3;
+                matNet.blendType = pc.BLEND_NORMAL;
+                matNet.update();
+
+                const matBall = createMaterial(new pc.Color(0.8, 1.0, 0)); // #ccff00
+                matBall.emissive = new pc.Color(0.2, 0.25, 0);
+                matBall.update();
+
+                const matPaddle = createMaterial(new pc.Color(0.9, 0.22, 0.27)); // #e63946
+                const matDark = createMaterial(new pc.Color(0.1, 0.1, 0.1));
+
+                // --- Environment ---
+
+                // Floor (Visual only, below court)
+                const floor = new pc.Entity('Floor');
+                floor.addComponent('render', { type: 'cylinder' });
+                floor.setLocalScale(40, 0.1, 40);
+                floor.setLocalPosition(0, -0.15, 0);
+                floor.render.material = matDark;
+                app.root.addChild(floor);
+
+                // Court Base (Physics + Visual)
+                const court = new pc.Entity('Court');
+                court.addComponent('render', { type: 'plane' });
+                court.setLocalScale(COURT_W, 1, COURT_L);
+                court.setLocalPosition(0, 0, 0);
+                court.render.material = matCourt;
+                // Add collision/rigidbody
+                court.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2, 0.1, COURT_L / 2) });
+                court.addComponent('rigidbody', { type: 'static', friction: 0.1, restitution: 0.75 });
+                // Note: Plane visual is flat, but collision box needs depth. We offset pos slightly
+                // PlayCanvas plane faces Y up.
+                app.root.addChild(court);
+
+                // Court Friction Fix (Since PC doesn't have fine-grained material pairs easily accessible in JS API without deep dive, we rely on body properties)
+
+                // Lines
+                const addLine = (w, l, x, z) => {
+                    const line = new pc.Entity();
+                    line.addComponent('render', { type: 'plane' });
+                    line.setLocalScale(w, 1, l);
+                    line.setLocalPosition(x, 0.01, z); // Raised
+                    line.render.material = matLine;
+                    app.root.addChild(line);
+                };
+                addLine(COURT_W, 0.05, 0, COURT_L / 2);
+                addLine(COURT_W, 0.05, 0, -COURT_L / 2);
+                addLine(0.05, COURT_L, COURT_W / 2, 0);
+                addLine(0.05, COURT_L, -COURT_W / 2, 0);
+                addLine(COURT_W, 0.05, 0, 2.13);
+                addLine(COURT_W, 0.05, 0, -2.13);
+                addLine(0.05, COURT_L - 4.26, 0, 0);
+
+                // Net
+                const net = new pc.Entity('Net');
+                const netVis = new pc.Entity('NetVisual');
+                netVis.addComponent('render', { type: 'box' });
+                netVis.setLocalScale(COURT_W + 0.4, NET_H, 0.02);
+                netVis.setLocalPosition(0, NET_H / 2, 0);
+                netVis.render.material = matNet;
+
+                const tape = new pc.Entity('NetTape');
+                tape.addComponent('render', { type: 'box' });
+                tape.setLocalScale(COURT_W + 0.4, 0.05, 0.05);
+                tape.setLocalPosition(0, NET_H, 0);
+                tape.render.material = matLine;
+
+                const postL = new pc.Entity('PostL');
+                postL.addComponent('render', { type: 'cylinder' });
+                postL.setLocalScale(0.08, NET_H + 0.1, 0.08);
+                postL.setLocalPosition(-(COURT_W / 2 + 0.2), NET_H / 2, 0);
+                postL.render.material = matDark;
+
+                const postR = new pc.Entity('PostR');
+                postR.addComponent('render', { type: 'cylinder' });
+                postR.setLocalScale(0.08, NET_H + 0.1, 0.08);
+                postR.setLocalPosition(COURT_W / 2 + 0.2, NET_H / 2, 0);
+                postR.render.material = matDark;
+
+                net.addChild(netVis); net.addChild(tape); net.addChild(postL); net.addChild(postR);
+                // Physics
+                net.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2 + 0.2, NET_H / 2, 0.05) });
+                net.addComponent('rigidbody', { type: 'static' });
+                net.setLocalPosition(0, 0, 0);
+                // Collider offset
+                // PlayCanvas RB center is entity center. We need to match visual.
+                // Or just create a separate collider entity.
+                const netCol = new pc.Entity('NetCollider');
+                netCol.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2 + 0.2, NET_H / 2, 0.05) });
+                netCol.addComponent('rigidbody', { type: 'static' });
+                netCol.setLocalPosition(0, NET_H / 2, 0);
+                app.root.addChild(netCol);
+                app.root.addChild(net);
+
+                // --- Gameplay Entities ---
+
+                // Ball
+                const ball = new pc.Entity('Ball');
+                ball.addComponent('render', { type: 'sphere' });
+                ball.render.material = matBall;
+                ball.setLocalScale(BALL_R * 2, BALL_R * 2, BALL_R * 2);
+                ball.addComponent('collision', { type: 'sphere', radius: BALL_R });
+                ball.addComponent('rigidbody', {
+                    type: 'dynamic',
+                    mass: 0.026,
+                    restitution: 0.8,
+                    linearDamping: 0.1,
+                    angularDamping: 0.1
+                });
+                ball.setPosition(0, 5, 0);
+                ball.enabled = false; // Start hidden
+                app.root.addChild(ball);
+
+                // Paddle
+                const paddle = new pc.Entity('Paddle');
+                const paddleVis = new pc.Entity('PaddleVis');
+                paddleVis.addComponent('render', { type: 'box' });
+                paddleVis.setLocalScale(0.22, 0.38, 0.02);
+                paddleVis.render.material = matPaddle;
+
+                const paddleHandle = new pc.Entity('PaddleHandle');
+                paddleHandle.addComponent('render', { type: 'cylinder' });
+                paddleHandle.setLocalScale(0.04, 0.15, 0.04);
+                paddleHandle.setLocalPosition(0, -0.26, 0);
+                paddleHandle.render.material = matDark;
+
+                paddle.addChild(paddleVis);
+                paddle.addChild(paddleHandle);
+
+                // Hit Box (Physics Only)
+                // Much larger than visual
+                paddle.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(0.3, 0.4, 0.1) });
+                paddle.addComponent('rigidbody', { type: 'kinematic' });
+                paddle.setPosition(0, 1, 6.5);
+                app.root.addChild(paddle);
+
+                // --- Logic & State ---
+                let gameState = 'IDLE';
+                let playerScore = 0, opponentScore = 0;
+                let lastMouseY = 0;
+                let lastPaddlePos = new pc.Vec3();
+
+                // UI Helpers
+                const msgEl = document.getElementById('message');
+                const showMsg = (txt) => {
+                    msgEl.innerText = txt;
+                    msgEl.classList.add('show');
+                    setTimeout(() => msgEl.classList.remove('show'), 1000);
+                };
+                showMsg('READY?');
+
+                // Game Loop
+                const resetBall = () => {
+                    ball.rigidbody.teleport(0, 10, 0);
+                    ball.rigidbody.linearVelocity = pc.Vec3.ZERO;
+                    ball.rigidbody.angularVelocity = pc.Vec3.ZERO;
+                    ball.enabled = false;
+                };
+
+                const serve = () => {
+                    gameState = 'PLAY';
+                    ball.enabled = true;
+                    // Serve from opp side
+                    const sx = (Math.random() - 0.5) * 3;
+                    ball.rigidbody.teleport(sx, 1.5, -6.5);
+                    ball.rigidbody.activate();
+
+                    const vz = 8 + Math.random() * 3;
+                    const vy = 3 + Math.random() * 2;
+                    const vx = (Math.random() - 0.5) * 2;
+
+                    ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
+                    document.getElementById('hint').style.opacity = 0;
+                };
+
+                // Paddle Control
+                // We need a plane to raycast against at Z=6.5
+                // Z-plane at 6.5 facing Z axis
+                const controlPlanePoint = new pc.Vec3(0, 0, 6.5);
+                const controlPlaneNormal = new pc.Vec3(0, 0, 1);
+
+                const ray = new pc.Ray();
+                const hitPoint = new pc.Vec3();
+
+                // Hit Zone Mechanics
+                // Zone: X[-3.0, 3.0], Y[-0.5, 4.5], Z[4.5, 8.5]
+                // Widen X to 3.0 for very generous side reach
+                const canHit = (pos) => {
+                    // PlayCanvas Vec3 access
+                    return pos.z > 4.5 && pos.z < 8.5 &&
+                        Math.abs(pos.x) < 3.0 &&
+                        pos.y > -0.5 && pos.y < 4.5;
+                };
+
+                let swipeStartPos = new pc.Vec2();
+                let swipeStartTime = 0;
+                let isSwiping = false;
+
+                // Input Listeners for Swipe
+                window.addEventListener('pointerdown', (e) => {
+                    if (gameState === 'IDLE') {
+                        serve();
+                    } else if (gameState === 'PLAY') {
+                        isSwiping = true;
+                        swipeStartTime = performance.now();
+                        swipeStartPos.set(e.clientX, e.clientY);
+                    }
+                });
+
+                window.addEventListener('pointerup', (e) => {
+                    if (!isSwiping || gameState !== 'PLAY') return;
+                    isSwiping = false;
+
+                    const ballPos = ball.getPosition();
+
+                    // Check Hit Zone
+                    if (canHit(ballPos)) {
+                        const dt = (performance.now() - swipeStartTime) / 1000;
+                        const dx = e.clientX - swipeStartPos.x;
+                        const dy = swipeStartPos.y - e.clientY; // Up is positive
+
+                        // Calculate Speed (px/s)
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        const speed = dist / Math.max(dt, 0.01);
+
+                        // Determine Shot
+                        // Thresholds: Slow < 500, Fast > 1500
+                        const intensity = Math.min(1, Math.max(0, (speed - 200) / 2000));
+
+                        let speedZ, speedY;
+
+                        if (intensity < 0.25) {
+                            // Drop
+                            speedZ = 5 + intensity * 8; // 5 to 7
+                            speedY = 4 + intensity * 2;
+                            showMsg('DROP');
+                        } else {
+                            // Drive / Smash
+                            speedZ = 9 + intensity * 15; // 9 to 24
+                            speedY = 3 + intensity * 4;
+                            showMsg('SMASH!');
+                        }
+
+                        // Steering based on swipe X direction
+                        const steerX = dx / window.innerWidth * 15;
+
+                        // Launch
+                        ball.rigidbody.linearVelocity = new pc.Vec3(
+                            steerX,
+                            Math.min(speedY, 8),
+                            -Math.min(speedZ, 22)
+                        );
+
+                        // Add some top spin based on intensity
+                        ball.rigidbody.angularVelocity = new pc.Vec3(intensity * 20, 0, 0);
+                    }
+                });
+
+                // Disable old physics collision for hitting (keep body for visual/blocking if needed, but logic is now in pointerup)
+                paddle.collision.off('collisionstart');
+
+                // Update Loop
+                let timeSinceDead = 0;
+
+                // Custom Input Handling for Raycast
+                window.addEventListener('pointermove', (e) => {
+                    // Convert to -1..1
+                    const x = (e.clientX / window.innerWidth) * 2 - 1;
+                    const y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                    // Update Camera Look slightly
+                    camera.lookAt(x * 0.5, 0.8 + y * 0.5, 0);
+
+                    // Raycast for Paddle
+                    const start = new pc.Vec3();
+                    const end = new pc.Vec3();
+                    camera.camera.screenToWorld(e.clientX, e.clientY, camera.camera.nearClip, start);
+                    camera.camera.screenToWorld(e.clientX, e.clientY, camera.camera.farClip, end);
+
+                    ray.origin.copy(start);
+                    ray.direction.copy(end).sub(start).normalize();
+
+                    // Manual Ray-Plane Intersection
+                    // t = ((planePoint - rayOrigin) . planeNormal) / (rayDir . planeNormal)
+                    const denom = ray.direction.dot(controlPlaneNormal);
+                    if (Math.abs(denom) > 1e-6) {
+                        const vec = new pc.Vec3().sub2(controlPlanePoint, ray.origin);
+                        const t = vec.dot(controlPlaneNormal) / denom;
+
+                        if (t >= 0) {
+                            hitPoint.copy(ray.origin).add(ray.direction.clone().scale(t));
+
+                            // Clamp
+                            const px = pc.math.clamp(hitPoint.x, -COURT_W / 2 - 0.5, COURT_W / 2 + 0.5);
+                            const py = pc.math.clamp(hitPoint.y, 0.2, 2.5);
+
+                            lastPaddlePos.copy(paddle.getPosition());
+                            paddle.rigidbody.teleport(px, py, 6.5);
+
+                            // Visual Tilt
+                            paddle.setLocalEulerAngles(-10 + py * 5, px * 10, 0);
+
+                            lastMouseY = py; // Store World Y for speed calc
+                        }
+                    }
+                });
+
+
+                window.addEventListener('pointerdown', () => {
+                    if (gameState === 'IDLE') serve();
+                });
+
+                // Game Loop Logic
+                app.on('update', (dt) => {
+                    if (gameState === 'PLAY' && ball.enabled) {
+                        const bPos = ball.getPosition();
+
+                        // Ball growing effect
+                        // Z range: -7 to 7
+                        const scale = 1 + pc.math.clamp((bPos.z + 7) / 14, 0, 1) * 0.8;
+                        ball.setLocalScale(BALL_R * 2 * scale, BALL_R * 2 * scale, BALL_R * 2 * scale);
+
+                        // Scoring / Out Bounds
+                        if (Math.abs(bPos.z) > 15 || bPos.y < -0.2) {
+                            if (bPos.z > 0) {
+                                opponentScore++;
+                                showMsg('OPPONENT POINT');
+                            } else {
+                                playerScore++;
+                                showMsg('PLAYER POINT');
+                            }
+
+                            // Update Score UI
+                            document.getElementById('player-score').innerText = playerScore;
+                            document.getElementById('opponent-score').innerText = opponentScore;
+
+                            gameState = 'IDLE';
+                            resetBall();
+                            setTimeout(() => {
+                                if (gameState === 'IDLE') serve();
+                            }, 2000);
+                        }
+                    }
+                });
+            }
+        })();
     </script>
 </body>
 
