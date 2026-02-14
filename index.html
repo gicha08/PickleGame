@@ -32,7 +32,8 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: space-between;
+            justify-content: center;
+            /* Center everything vertically */
             padding: 30px;
             box-sizing: border-box;
         }
@@ -107,9 +108,29 @@
             text-transform: uppercase;
             letter-spacing: 4px;
             opacity: 0;
+            color: white;
+            /* Default color */
             transform: scale(0.8);
             transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            text-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            margin-top: -50px;
+        }
+
+        #message.good {
+            color: #4CAF50;
+        }
+
+        #message.fair {
+            color: #8BC34A;
+        }
+
+        #message.short {
+            color: #FFC107;
+        }
+
+        #message.high {
+            color: #F44336;
         }
 
         #message.show {
@@ -118,6 +139,9 @@
         }
 
         #hint {
+            position: absolute;
+            bottom: 30px;
+            /* Stick to bottom */
             font-size: 18px;
             opacity: 0.8;
             transition: opacity 0.5s;
@@ -522,7 +546,8 @@
                     let fairDrops = 0;
                     let shortBalls = 0;
                     let highBalls = 0;
-                    let ballHasBounced = false; // NEW: track if ball bounced this round
+                    let ballHasBounced = false; // track if ball bounced this round
+                    let heightAtCrossing = -1; // NEW: Capture height when it reaches opponent
 
                     let lastMouseY = 0;
                     let lastPaddlePos = new pc.Vec3();
@@ -534,10 +559,13 @@
 
                     // UI Helpers
                     const msgEl = document.getElementById('message');
-                    const showMsg = (txt) => {
+                    const showMsg = (txt, type = '') => {
                         msgEl.innerText = txt;
+                        msgEl.className = type; // Reset classes to just the type
+                        // Force a reflow to restart animation if needed
+                        msgEl.offsetHeight;
                         msgEl.classList.add('show');
-                        setTimeout(() => msgEl.classList.remove('show'), 1000);
+                        setTimeout(() => msgEl.classList.remove('show'), 1500);
                     };
                     const updateScoreUI = () => {
                         document.getElementById('good-score').innerText = goodDrops;
@@ -554,7 +582,8 @@
                         ball.rigidbody.angularVelocity = pc.Vec3.ZERO;
                         ball.enabled = false;
                         playerHasHit = false;
-                        ballHasBounced = false; // Reset bounce flag
+                        ballHasBounced = false;
+                        heightAtCrossing = -1; // Reset crossing height
                     };
 
                     const serve = () => {
@@ -721,7 +750,7 @@
                     // Game Loop Logic
                     const KITCHEN_Z = -2.13;
                     const OPP_REACH_HEIGHT = 1.6; // head height - only smash if ball is this high or above
-                    const NEXT_BALL_DELAY = 600; // ms before next serve - reduced from 1200 to avoid waiting for rolling balls
+                    const NEXT_BALL_DELAY = 1200; // ms before next serve - adjusted for better pacing
 
                     const endRound = () => {
                         gameState = 'IDLE';
@@ -789,85 +818,79 @@
                             // --- Shot categorization (after player has hit) ---
                             if (playerHasHit && gameState === 'PLAY') {
 
-                                // SHORT: ball bouncing/rolling on player's side (never reached net)
-                                // Catch this early to avoid waiting for rolling balls
-                                if (bPos.z > 2 && bVel.z < 2 && bPos.y < 0.8) {
+                                // --- SHORT DETECTION (IMMEDIATE) ---
+                                // 1. Bouncing on player's side after hit
+                                const bouncesOnPlayerSide = (bPos.z > 0.2 && bPos.y < 0.25 && bVel.y < 0);
+                                // 2. Ball moving backwards away from net on player's side
+                                const movingWrongWay = (bPos.z > 0.5 && bVel.z > 2);
+
+                                if (bouncesOnPlayerSide || movingWrongWay) {
                                     shortBalls++;
                                     updateScoreUI();
-                                    showMsg('SHORT!');
+                                    showMsg('SHORT!', 'short');
                                     endRound();
                                     return;
                                 }
 
-                                // SHORT: ball hit the net and bouncing back
+                                // 3. Ball hit the net and bouncing back
                                 if (bPos.z > 0.3 && bPos.z < 2 && bVel.z > 0 && bVel.z < 3) {
                                     shortBalls++;
                                     updateScoreUI();
-                                    showMsg('SHORT!');
+                                    showMsg('SHORT!', 'short');
                                     endRound();
                                     return;
                                 }
 
                                 // Ball crossed the net (z < 0)
                                 if (bPos.z < -0.3) {
-                                    // 1. Check for ball bounce (The "Success" condition)
-                                    // Increased height threshold (0.25) to catch bounce frames reliably
-                                    const hitGround = (bPos.y < 0.25 && bVel.y < 0);
+                                    // 1. Capture height as it reaches the opponent's plane (z = -2.13)
+                                    if (bPos.z <= KITCHEN_Z && heightAtCrossing === -1) {
+                                        heightAtCrossing = bPos.y;
 
-                                    if ((hitGround || bPos.y < 0.1) && !ballHasBounced) {
-                                        ballHasBounced = true;
-                                        if (bPos.z > KITCHEN_Z) {
-                                            // Bounced in kitchen!
-                                            if (bPos.z > -1.8) {
-                                                goodDrops++;
-                                                showMsg('GOOD DROP!');
-                                            } else {
-                                                fairDrops++;
-                                                showMsg('FAIR DROP!');
-                                            }
+                                        // HIGH BALL RULE: Above waist height (mid-torso ~1.15m)
+                                        if (heightAtCrossing >= 1.15) {
+                                            highBalls++;
                                             updateScoreUI();
-                                            endRound();
-                                            return;
-                                        } else if (bPos.z > -COURT_L / 2) {
-                                            // Bounced deep but INSIDE the court!
-                                            // User requested bounded balls count as good drops
-                                            fairDrops++;
-                                            updateScoreUI();
-                                            showMsg('FAIR DROP!');
-                                            endRound();
-                                            return;
-                                        } else {
-                                            // Out of bounds (back)
-                                            highBalls++; // Count as miss for deep out
-                                            updateScoreUI();
-                                            showMsg('TOO DEEP!');
-                                            endRound();
+                                            showMsg('HIGH BALL!', 'high');
+
+                                            // Intercept and smash
+                                            const currentPos = opponent.getPosition();
+                                            opponent.setPosition(bPos.x + 0.5, currentPos.y, currentPos.z);
+                                            opponentSmash();
+                                            playerHasHit = false;
                                             return;
                                         }
                                     }
 
-                                    // 2. Check for interception (SMASH)
-                                    // ONLY smash if it hasn't bounced yet, is in strike zone, and is HIGH
-                                    if (!ballHasBounced && bPos.z < -2.0) {
-                                        const isTooHigh = bPos.y > NET_H + 0.8;
-                                        const isTooDeep = bPos.z < KITCHEN_Z - 0.4;
+                                    // 2. Check for bounce (GOOD or FAIR DROP)
+                                    const hitGround = (bPos.y < 0.25 && bVel.y < 0);
+                                    if ((hitGround || bPos.y < 0.1) && !ballHasBounced) {
+                                        ballHasBounced = true;
 
-                                        if (isTooHigh || (isTooDeep && bPos.y > NET_H + 0.5)) {
-                                            // Safeguard: Never smash if the ball is already low or falling fast into the kitchen
-                                            if (bPos.y < NET_H + 0.4 || (bVel.y < -0.5 && bPos.z > -2.3)) {
-                                                // Let it fall! It's a drop!
+                                        // Must be inside the court baseline
+                                        if (bPos.z > -COURT_L / 2) {
+                                            // Determine shot type by crossing height
+                                            // (If it bounced before reaching the opponent plane, use current height)
+                                            const h = (heightAtCrossing === -1) ? bPos.y : heightAtCrossing;
+
+                                            // Rule: < 0.6m is GOOD, else FAIR (since we already handled HIGH above)
+                                            if (h < 0.6) {
+                                                goodDrops++;
+                                                showMsg('GOOD DROP!', 'good');
                                             } else {
-                                                highBalls++;
-                                                updateScoreUI();
-                                                showMsg(isTooHigh ? 'HIGH BALL!' : 'TOO DEEP!');
-
-                                                const currentPos = opponent.getPosition();
-                                                opponent.setPosition(bPos.x + 0.5, currentPos.y, currentPos.z);
-
-                                                opponentSmash();
-                                                playerHasHit = false;
-                                                return;
+                                                fairDrops++;
+                                                showMsg('FAIR DROP!', 'fair');
                                             }
+                                            updateScoreUI();
+                                            endRound();
+                                            return;
+                                        } else {
+                                            // Out of bounds back
+                                            highBalls++;
+                                            updateScoreUI();
+                                            showMsg('TOO DEEP!', 'high');
+                                            endRound();
+                                            return;
                                         }
                                     }
                                 }
