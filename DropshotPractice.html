@@ -866,7 +866,7 @@
 
                     // Game Loop Logic
                     const KITCHEN_Z = -2.13;
-                    const OPP_REACH_HEIGHT = 1.6; // Head height - only smash if ball is truly high
+                    const OPP_REACH_HEIGHT = 1.4; // Chest/Shoulder height - threshold for High Ball/Smash
                     const NEXT_BALL_DELAY = 1200; // ms before next serve - adjusted for better pacing
 
                     const endRound = () => {
@@ -968,10 +968,10 @@
                                         ballHasBounced = true; // Mark as processed for this round
                                         const h = bPos.y; // Height at the moment of categorization
 
-                                        if (h < 1.1) {
+                                        if (h < 1.0) {
                                             goodDrops++;
                                             showMsg('GOOD DROP!', 'good');
-                                        } else if (h < 1.6) {
+                                        } else if (h < 1.4) {
                                             fairDrops++;
                                             showMsg('FAIR DROP!', 'fair');
                                         } else {
