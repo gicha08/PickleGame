@@ -63,6 +63,7 @@
         const PADDLE_H_PX = 30;
         const PADDLE_Y_RATIO = 0.85;
         let paddleForward = 0; // 0-1, how far paddle has lunged forward during swing
+        let paddleVisible = false; // only show when finger is on screen
 
         // Opponent
         let opponentX = 0.5;
@@ -105,17 +106,22 @@
             const netY = h * NET_Y_RATIO;
 
             // Sky gradient
-            const skyGrad = ctx.createLinearGradient(0, 0, 0, vanishY);
-            skyGrad.addColorStop(0, '#87CEEB');
-            skyGrad.addColorStop(1, '#b0d4f1');
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, vanishY + 20);
+            skyGrad.addColorStop(0, '#5da0d4');
+            skyGrad.addColorStop(0.6, '#87CEEB');
+            skyGrad.addColorStop(1, '#b8ddf0');
             ctx.fillStyle = skyGrad;
-            ctx.fillRect(0, 0, w, vanishY);
+            ctx.fillRect(0, 0, w, vanishY + 20);
 
-            // Court surface with perspective
+            // Distant tree line / fence hint
+            ctx.fillStyle = '#4a8a5a';
+            ctx.fillRect(0, vanishY - 12, w, 14);
+
+            // Court surface — blueish sport court
             const courtGrad = ctx.createLinearGradient(0, vanishY, 0, h);
-            courtGrad.addColorStop(0, '#2d7a4f');
-            courtGrad.addColorStop(0.5, '#358856');
-            courtGrad.addColorStop(1, '#3d9960');
+            courtGrad.addColorStop(0, '#2a6b8a');
+            courtGrad.addColorStop(0.4, '#2f7595');
+            courtGrad.addColorStop(1, '#357fa0');
             ctx.fillStyle = courtGrad;
             ctx.beginPath();
             ctx.moveTo(0, vanishY);
@@ -123,6 +129,16 @@
             ctx.lineTo(w, h);
             ctx.lineTo(0, h);
             ctx.fill();
+
+            // Subtle court texture lines
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+            ctx.lineWidth = 1;
+            for (let ty = vanishY; ty < h; ty += 12) {
+                ctx.beginPath();
+                ctx.moveTo(0, ty);
+                ctx.lineTo(w, ty);
+                ctx.stroke();
+            }
 
             // Perspective court lines
             const cx = w / 2;
@@ -168,37 +184,70 @@
             }
 
             // --- Net ---
-            const netTopY = netY - 20;
-            const netBottomY = netY + 8;
+            const netTopY = netY - 40;
+            const netBottomY = netY + 15;
             const netT = (netY - vanishY) / (h - vanishY);
             const netLeft = topLeft + (baseLeft - topLeft) * netT - 10;
             const netRight = topRight + (baseRight - topRight) * netT + 10;
 
-            // Net band
-            ctx.fillStyle = '#eee';
-            ctx.fillRect(netLeft, netTopY, netRight - netLeft, 6);
+            // Net body (semi-transparent dark mesh background)
+            ctx.fillStyle = 'rgba(30,30,30,0.35)';
+            ctx.fillRect(netLeft, netTopY + 6, netRight - netLeft, netBottomY - netTopY - 6);
 
-            // Net mesh
-            ctx.strokeStyle = 'rgba(200,200,200,0.6)';
+            // Net mesh — vertical threads
+            ctx.strokeStyle = 'rgba(220,220,220,0.4)';
             ctx.lineWidth = 1;
-            const meshSpacing = 18;
+            const meshSpacing = 12;
             for (let x = netLeft; x < netRight; x += meshSpacing) {
                 ctx.beginPath();
-                ctx.moveTo(x, netTopY);
+                ctx.moveTo(x, netTopY + 6);
                 ctx.lineTo(x, netBottomY);
                 ctx.stroke();
             }
-            for (let y = netTopY; y < netBottomY; y += 8) {
+            // Net mesh — horizontal threads
+            for (let y = netTopY + 6; y < netBottomY; y += 6) {
                 ctx.beginPath();
                 ctx.moveTo(netLeft, y);
                 ctx.lineTo(netRight, y);
                 ctx.stroke();
             }
 
-            // Net posts
-            ctx.fillStyle = '#888';
-            ctx.fillRect(netLeft - 4, netTopY - 10, 8, netBottomY - netTopY + 20);
-            ctx.fillRect(netRight - 4, netTopY - 10, 8, netBottomY - netTopY + 20);
+            // White tape along the top
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(netLeft, netTopY, netRight - netLeft, 7);
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(netLeft, netTopY, netRight - netLeft, 7);
+
+            // Cable along the bottom
+            ctx.strokeStyle = 'rgba(100,100,100,0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(netLeft, netBottomY);
+            ctx.lineTo(netRight, netBottomY);
+            ctx.stroke();
+
+            // Net posts — cylindrical look
+            const postW = 8;
+            const postH = netBottomY - netTopY + 24;
+            // Left post
+            ctx.fillStyle = '#999';
+            ctx.fillRect(netLeft - postW / 2, netTopY - 12, postW, postH);
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fillRect(netLeft - postW / 2, netTopY - 12, postW * 0.4, postH);
+            // Right post
+            ctx.fillStyle = '#999';
+            ctx.fillRect(netRight - postW / 2, netTopY - 12, postW, postH);
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fillRect(netRight - postW / 2, netTopY - 12, postW * 0.4, postH);
+            // Post caps
+            ctx.fillStyle = '#bbb';
+            ctx.beginPath();
+            ctx.arc(netLeft, netTopY - 12, postW / 2 + 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(netRight, netTopY - 12, postW / 2 + 1, 0, Math.PI * 2);
+            ctx.fill();
 
             // Net hit flash
             if (netHitAnim > 0) {
@@ -214,72 +263,195 @@
 
             const oppY = vanishY + (netY - vanishY) * 0.55;
             const oppX = w * opponentX;
-            const scale = 0.8;
+            const s = 0.9; // scale
 
-            const headR = 16 * scale;
-            const bodyLen = 50 * scale;
-            const armLen = 35 * scale;
-            const legLen = 35 * scale;
+            const headR = 16 * s;
+            const bodyLen = 55 * s;
+            const armLen = 38 * s;
+            const legLen = 40 * s;
+            const shoulderW = 16 * s;
 
-            // Head
-            ctx.fillStyle = '#f4c7a1';
+            const swingAngle = Math.sin(opponentSwingPhase) * 0.9;
+
+            // --- Shadow on court ---
+            ctx.fillStyle = 'rgba(0,0,0,0.15)';
             ctx.beginPath();
-            ctx.arc(oppX, oppY - bodyLen - headR, headR, 0, Math.PI * 2);
+            ctx.ellipse(oppX, oppY + legLen + 4, 22 * s, 6 * s, 0, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
-            ctx.stroke();
 
-            // Shirt / body
-            ctx.fillStyle = '#2255aa';
-            ctx.fillRect(oppX - 14 * scale, oppY - bodyLen, 28 * scale, bodyLen * 0.6);
-            ctx.strokeStyle = '#2255aa';
-            ctx.lineWidth = 5 * scale;
+            // --- Legs (shorts + legs) ---
+            // Shorts
+            ctx.fillStyle = '#1a1a3a';
             ctx.beginPath();
-            ctx.moveTo(oppX, oppY - bodyLen);
-            ctx.lineTo(oppX, oppY);
-            ctx.stroke();
+            ctx.moveTo(oppX - 12 * s, oppY);
+            ctx.lineTo(oppX + 12 * s, oppY);
+            ctx.lineTo(oppX + 14 * s, oppY + legLen * 0.35);
+            ctx.lineTo(oppX - 14 * s, oppY + legLen * 0.35);
+            ctx.closePath();
+            ctx.fill();
 
-            // Legs
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 4 * scale;
+            // Left leg
+            ctx.strokeStyle = '#d4a574';
+            ctx.lineWidth = 6 * s;
+            ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.moveTo(oppX, oppY);
-            ctx.lineTo(oppX - 15 * scale, oppY + legLen);
+            ctx.moveTo(oppX - 10 * s, oppY + legLen * 0.3);
+            ctx.lineTo(oppX - 14 * s, oppY + legLen);
             ctx.stroke();
+            // Left shoe
+            ctx.fillStyle = '#eee';
             ctx.beginPath();
-            ctx.moveTo(oppX, oppY);
-            ctx.lineTo(oppX + 15 * scale, oppY + legLen);
-            ctx.stroke();
+            ctx.ellipse(oppX - 14 * s, oppY + legLen + 3, 7 * s, 4 * s, 0, 0, Math.PI * 2);
+            ctx.fill();
 
-            // Arms
-            const swingAngle = Math.sin(opponentSwingPhase) * 0.8;
-            ctx.strokeStyle = '#f4c7a1';
-            ctx.lineWidth = 4 * scale;
-
-            // Left arm
+            // Right leg
+            ctx.strokeStyle = '#d4a574';
+            ctx.lineWidth = 6 * s;
             ctx.beginPath();
-            ctx.moveTo(oppX - 12 * scale, oppY - bodyLen * 0.75);
-            ctx.lineTo(oppX - 12 * scale - armLen * 0.6, oppY - bodyLen * 0.5);
+            ctx.moveTo(oppX + 10 * s, oppY + legLen * 0.3);
+            ctx.lineTo(oppX + 14 * s, oppY + legLen);
             ctx.stroke();
+            // Right shoe
+            ctx.fillStyle = '#eee';
+            ctx.beginPath();
+            ctx.ellipse(oppX + 14 * s, oppY + legLen + 3, 7 * s, 4 * s, 0, 0, Math.PI * 2);
+            ctx.fill();
 
-            // Right arm (paddle arm)
-            const armBaseX = oppX + 12 * scale;
-            const armBaseY = oppY - bodyLen * 0.75;
-            const armEndX = armBaseX + Math.cos(-0.5 + swingAngle) * armLen;
-            const armEndY = armBaseY + Math.sin(-0.5 + swingAngle) * armLen;
+            // --- Body / Shirt ---
+            // Torso
+            ctx.fillStyle = '#2255cc';
+            ctx.beginPath();
+            ctx.moveTo(oppX - shoulderW, oppY - bodyLen);
+            ctx.lineTo(oppX + shoulderW, oppY - bodyLen);
+            ctx.lineTo(oppX + 13 * s, oppY);
+            ctx.lineTo(oppX - 13 * s, oppY);
+            ctx.closePath();
+            ctx.fill();
+            // Shirt collar
+            ctx.fillStyle = '#1a44aa';
+            ctx.beginPath();
+            ctx.moveTo(oppX - 8 * s, oppY - bodyLen);
+            ctx.lineTo(oppX + 8 * s, oppY - bodyLen);
+            ctx.lineTo(oppX + 6 * s, oppY - bodyLen + 6 * s);
+            ctx.lineTo(oppX - 6 * s, oppY - bodyLen + 6 * s);
+            ctx.closePath();
+            ctx.fill();
+
+            // --- Right arm (non-paddle, from our perspective on the right) ---
+            ctx.strokeStyle = '#d4a574';
+            ctx.lineWidth = 5 * s;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(oppX + shoulderW, oppY - bodyLen * 0.82);
+            ctx.quadraticCurveTo(
+                oppX + shoulderW + 18 * s, oppY - bodyLen * 0.45,
+                oppX + shoulderW + 10 * s, oppY - bodyLen * 0.2
+            );
+            ctx.stroke();
+            // Hand
+            ctx.fillStyle = '#d4a574';
+            ctx.beginPath();
+            ctx.arc(oppX + shoulderW + 10 * s, oppY - bodyLen * 0.2, 4 * s, 0, Math.PI * 2);
+            ctx.fill();
+
+            // --- Left arm (paddle arm, from our perspective on the LEFT = opponent's right hand) ---
+            const armBaseX = oppX - shoulderW;
+            const armBaseY = oppY - bodyLen * 0.82;
+            // Upper arm
+            const elbowX = armBaseX - Math.cos(0.3 - swingAngle * 0.5) * armLen * 0.55;
+            const elbowY = armBaseY + Math.sin(0.8 - swingAngle * 0.3) * armLen * 0.55;
+            // Forearm extends from elbow with swing
+            const handX = elbowX - Math.cos(-0.2 + swingAngle) * armLen * 0.5;
+            const handY = elbowY + Math.sin(-0.8 + swingAngle) * armLen * 0.5;
+
+            // Sleeve
+            ctx.strokeStyle = '#2255cc';
+            ctx.lineWidth = 7 * s;
             ctx.beginPath();
             ctx.moveTo(armBaseX, armBaseY);
-            ctx.lineTo(armEndX, armEndY);
+            ctx.lineTo(armBaseX + (elbowX - armBaseX) * 0.4, armBaseY + (elbowY - armBaseY) * 0.4);
             ctx.stroke();
 
-            // Opponent paddle
-            ctx.fillStyle = '#ff4757';
+            // Arm skin
+            ctx.strokeStyle = '#d4a574';
+            ctx.lineWidth = 5 * s;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(armBaseX, armBaseY);
+            ctx.quadraticCurveTo(elbowX, elbowY, handX, handY);
+            ctx.stroke();
+
+            // Hand grip
+            ctx.fillStyle = '#c89660';
+            ctx.beginPath();
+            ctx.arc(handX, handY, 4.5 * s, 0, Math.PI * 2);
+            ctx.fill();
+
+            // --- Paddle (on left side from our view) ---
             ctx.save();
-            ctx.translate(armEndX, armEndY);
-            ctx.rotate(-0.3 + swingAngle * 0.5);
-            ctx.fillRect(-6 * scale, -12 * scale, 12 * scale, 24 * scale);
+            ctx.translate(handX, handY);
+            const paddleAngle = -0.8 + swingAngle * 0.6;
+            ctx.rotate(paddleAngle);
+            // Handle
+            ctx.fillStyle = '#444';
+            ctx.fillRect(-2.5 * s, 8 * s, 5 * s, 14 * s);
+            // Paddle face
+            ctx.fillStyle = '#22bb55';
+            ctx.strokeStyle = '#188844';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(-10 * s, -14 * s, 20 * s, 24 * s, 4 * s);
+            ctx.fill();
+            ctx.stroke();
+            // Paddle face detail
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-6 * s, -10 * s);
+            ctx.lineTo(-6 * s, 6 * s);
+            ctx.moveTo(0, -10 * s);
+            ctx.lineTo(0, 6 * s);
+            ctx.moveTo(6 * s, -10 * s);
+            ctx.lineTo(6 * s, 6 * s);
+            ctx.stroke();
             ctx.restore();
+
+            // --- Head ---
+            // Neck
+            ctx.fillStyle = '#d4a574';
+            ctx.fillRect(oppX - 4 * s, oppY - bodyLen - 5 * s, 8 * s, 8 * s);
+            // Head shape
+            ctx.fillStyle = '#e8b888';
+            ctx.beginPath();
+            ctx.arc(oppX, oppY - bodyLen - headR - 3 * s, headR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#c49565';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            // Hair
+            ctx.fillStyle = '#3a2a1a';
+            ctx.beginPath();
+            ctx.arc(oppX, oppY - bodyLen - headR - 5 * s, headR * 0.95, Math.PI * 1.1, Math.PI * 1.9);
+            ctx.quadraticCurveTo(oppX + headR, oppY - bodyLen - headR - 2 * s, oppX + headR * 0.7, oppY - bodyLen - headR + 4 * s);
+            ctx.lineTo(oppX - headR * 0.7, oppY - bodyLen - headR + 4 * s);
+            ctx.closePath();
+            ctx.fill();
+            // Eyes
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.arc(oppX - 5 * s, oppY - bodyLen - headR - 2 * s, 2 * s, 0, Math.PI * 2);
+            ctx.arc(oppX + 5 * s, oppY - bodyLen - headR - 2 * s, 2 * s, 0, Math.PI * 2);
+            ctx.fill();
+            // Cap visor
+            ctx.fillStyle = '#cc3333';
+            ctx.beginPath();
+            ctx.ellipse(oppX, oppY - bodyLen - headR * 1.8, headR * 1.1, 5 * s, 0, 0, Math.PI);
+            ctx.fill();
+            // Cap top
+            ctx.fillStyle = '#cc3333';
+            ctx.beginPath();
+            ctx.arc(oppX, oppY - bodyLen - headR - 5 * s, headR * 0.85, Math.PI * 1.0, Math.PI * 2.0);
+            ctx.fill();
         }
 
         function drawBall() {
@@ -350,66 +522,96 @@
 
             if (bx === undefined) return;
 
-            // Shadow
-            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            // Shadow on court
+            ctx.fillStyle = 'rgba(0,0,0,0.18)';
             ctx.beginPath();
-            ctx.ellipse(bx, by + radius * 0.8, radius * 0.8, radius * 0.3, 0, 0, Math.PI * 2);
+            ctx.ellipse(bx + 2, by + radius * 1.0, radius * 0.9, radius * 0.25, 0.1, 0, Math.PI * 2);
             ctx.fill();
 
-            // Ball
-            ctx.fillStyle = '#e8d44d';
+            // Ball base
+            const ballGrad = ctx.createRadialGradient(bx - radius * 0.2, by - radius * 0.3, radius * 0.1, bx, by, radius);
+            ballGrad.addColorStop(0, '#f5e96b');
+            ballGrad.addColorStop(0.7, '#e0c830');
+            ballGrad.addColorStop(1, '#c4a520');
+            ctx.fillStyle = ballGrad;
             ctx.beginPath();
             ctx.arc(bx, by, radius, 0, Math.PI * 2);
             ctx.fill();
 
+            // Wiffle ball holes (small dots)
+            if (radius > 14) {
+                ctx.fillStyle = 'rgba(0,0,0,0.12)';
+                const holeCount = 6;
+                for (let i = 0; i < holeCount; i++) {
+                    const angle = (i / holeCount) * Math.PI * 2 + 0.3;
+                    const hr = radius * 0.45;
+                    const hx = bx + Math.cos(angle) * hr;
+                    const hy = by + Math.sin(angle) * hr;
+                    ctx.beginPath();
+                    ctx.arc(hx, hy, radius * 0.08, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
             // Highlight
-            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
             ctx.beginPath();
-            ctx.arc(bx - radius * 0.25, by - radius * 0.25, radius * 0.35, 0, Math.PI * 2);
+            ctx.arc(bx - radius * 0.28, by - radius * 0.28, radius * 0.3, 0, Math.PI * 2);
             ctx.fill();
 
             // Outline
-            ctx.strokeStyle = '#c4a830';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#b09420';
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.arc(bx, by, radius, 0, Math.PI * 2);
             ctx.stroke();
         }
 
-        function drawPaddle() {
+        // Returns the paddle's current bounding box in canvas coords (for hit detection)
+        function getPaddleRect() {
             const w = W(), h = H();
             const px = w * paddleX;
-            // Paddle moves forward (up) when swinging
             const forwardOffset = paddleForward * h * 0.08;
             const py = h * PADDLE_Y_RATIO - forwardOffset;
             const pw = w * PADDLE_W;
             const ph = PADDLE_H_PX * 2;
-            // Slight scale increase when lunging forward
             const scale = 1 + paddleForward * 0.15;
             const spw = pw * scale;
             const sph = ph * scale;
+            return { x: px - spw / 2, y: py - sph / 2, w: spw, h: sph, cx: px, cy: py };
+        }
+
+        function drawPaddle() {
+            if (!paddleVisible && paddleForward <= 0) return; // hidden when finger not on screen
+
+            const r = getPaddleRect();
+            const alpha = paddleVisible ? 1 : Math.max(0, paddleForward * 2); // fade out after release
+
+            ctx.globalAlpha = alpha;
 
             // Shadow
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
-            ctx.fillRect(px - spw / 2 + 4, py - sph / 2 + 4, spw, sph);
+            ctx.fillRect(r.x + 4, r.y + 4, r.w, r.h);
 
             // Paddle
             ctx.fillStyle = '#ff4757';
             ctx.strokeStyle = '#cc2233';
             ctx.lineWidth = 3;
-            ctx.fillRect(px - spw / 2, py - sph / 2, spw, sph);
-            ctx.strokeRect(px - spw / 2, py - sph / 2, spw, sph);
+            ctx.fillRect(r.x, r.y, r.w, r.h);
+            ctx.strokeRect(r.x, r.y, r.w, r.h);
 
             // Grip lines
             ctx.strokeStyle = 'rgba(0,0,0,0.2)';
             ctx.lineWidth = 2;
             for (let i = 0; i < 3; i++) {
-                const ly = py - sph / 2 + sph * 0.3 + i * (sph * 0.15);
+                const ly = r.y + r.h * 0.3 + i * (r.h * 0.15);
                 ctx.beginPath();
-                ctx.moveTo(px - spw / 2 + 6, ly);
-                ctx.lineTo(px + spw / 2 - 6, ly);
+                ctx.moveTo(r.x + 6, ly);
+                ctx.lineTo(r.x + r.w - 6, ly);
                 ctx.stroke();
             }
+
+            ctx.globalAlpha = 1;
         }
 
         function drawSwipeTrail() {
@@ -596,11 +798,43 @@
             swipeTrail = [];
         }
 
+        function getBallPos() {
+            if (!ball) return null;
+            const w = W(), h = H();
+            const vanishY = h * VANISH_Y_RATIO;
+            const netY = h * NET_Y_RATIO;
+            const paddleY = h * PADDLE_Y_RATIO;
+            const t = ball.t;
+            const startBX = w * ball.startX;
+            const endBX = w * ball.targetX;
+            const bx = startBX + (endBX - startBX) * t;
+            const startBY = vanishY + (netY - vanishY) * 0.3;
+            const endBY = paddleY - 30;
+            let by;
+            if (t < 0.6) {
+                const lt = t / 0.6;
+                by = startBY + (endBY * 0.7 - startBY) * lt;
+                by -= Math.sin(lt * Math.PI) * h * 0.08;
+            } else {
+                const lt = (t - 0.6) / 0.4;
+                const bounceY = endBY * 0.7;
+                by = bounceY + (endBY - bounceY) * lt;
+                by -= Math.sin(lt * Math.PI) * h * 0.12;
+            }
+            const radius = 8 + t * 28;
+            return { x: bx, y: by, r: radius };
+        }
+
         function checkHit() {
-            if (!ball || ball.phase !== 'strike_zone') return false;
-            const ballX = ball.startX + (ball.targetX - ball.startX) * ball.t;
-            const diff = Math.abs(ballX - paddleX);
-            return diff < PADDLE_W * 1.5;
+            if (!ball || ball.phase !== 'strike_zone' || !paddleVisible) return false;
+            const bp = getBallPos();
+            if (!bp) return false;
+            const pr = getPaddleRect();
+            // Check if ball circle overlaps paddle rect (with generous margin)
+            const margin = bp.r * 0.5;
+            const overlapX = bp.x + bp.r + margin > pr.x && bp.x - bp.r - margin < pr.x + pr.w;
+            const overlapY = bp.y + bp.r + margin > pr.y && bp.y - bp.r - margin < pr.y + pr.h;
+            return overlapX && overlapY;
         }
 
         function playerPoint() {
@@ -738,6 +972,7 @@
             const touch = e.touches[0];
             touchId = touch.identifier;
             lastTouchX = touch.clientX;
+            paddleVisible = true;
 
             // Snap paddle to where finger touches
             const rect = wrapper.getBoundingClientRect();
@@ -773,15 +1008,24 @@
             lastTouchX = touch.clientX;
         }, { passive: false });
 
-        canvas.addEventListener('touchend', (e) => {
+        document.addEventListener('touchend', (e) => {
+            if (touchId === null) return;
+            const touch = Array.from(e.changedTouches).find(t => t.identifier === touchId);
+            if (!touch) return;
             e.preventDefault();
             if (isSwiping && gameState === 'strike_zone') {
-                const touch = e.changedTouches[0];
                 processSwipe(touch.clientX, touch.clientY);
                 isSwiping = false;
             }
+            paddleVisible = false;
             touchId = null;
         }, { passive: false });
+
+        document.addEventListener('touchcancel', () => {
+            paddleVisible = false;
+            isSwiping = false;
+            touchId = null;
+        });
 
         // --- Mouse Controls (desktop testing) ---
         let mouseDown = false;
@@ -789,6 +1033,7 @@
         canvas.addEventListener('mousedown', (e) => {
             mouseDown = true;
             lastTouchX = e.clientX;
+            paddleVisible = true;
 
             // Snap paddle to click position
             const rect = wrapper.getBoundingClientRect();
@@ -819,11 +1064,13 @@
             lastTouchX = e.clientX;
         });
 
-        canvas.addEventListener('mouseup', (e) => {
+        document.addEventListener('mouseup', (e) => {
+            if (!mouseDown) return;
             if (isSwiping && gameState === 'strike_zone') {
                 processSwipe(e.clientX, e.clientY);
                 isSwiping = false;
             }
+            paddleVisible = false;
             mouseDown = false;
         });
 
