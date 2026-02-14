@@ -316,99 +316,139 @@
                     netCol.setLocalPosition(0, NET_H / 2, 0);
                     app.root.addChild(netCol);
 
-                    // --- Opponent ---
+                    // --- Opponent (Bulky Muscular Right-handed player) ---
                     const matSkin = createMaterial(new pc.Color(0.85, 0.65, 0.5));
                     const matShirt = createMaterial(new pc.Color(0.2, 0.4, 0.8));
                     const matShorts = createMaterial(new pc.Color(0.15, 0.15, 0.15));
                     const matShoe = createMaterial(new pc.Color(1, 1, 1));
+                    const matHeadband = createMaterial(new pc.Color(0.9, 0.1, 0.1)); // Red headband
 
                     const opponent = new pc.Entity('Opponent');
                     // Kitchen line is at z = -2.13
                     opponent.setLocalPosition(0, 0, -2.13);
 
-                    // Torso
+                    // Torso (BULKY - wide and muscular)
                     const torso = new pc.Entity('Torso');
                     torso.addComponent('render', { type: 'box' });
-                    torso.setLocalScale(0.4, 0.5, 0.25);
-                    torso.setLocalPosition(0, 1.2, 0);
+                    torso.setLocalScale(0.6, 0.7, 0.35); // Much wider and taller
+                    torso.setLocalPosition(0, 1.3, 0);
                     torso.render.material = matShirt;
                     opponent.addChild(torso);
 
-                    // Head
+                    // Neck (thick, muscular)
+                    const neck = new pc.Entity('Neck');
+                    neck.addComponent('render', { type: 'cylinder' });
+                    neck.setLocalScale(0.15, 0.14, 0.15); // Thicker neck
+                    neck.setLocalPosition(0, 1.72, 0);
+                    neck.render.material = matSkin;
+                    opponent.addChild(neck);
+
+                    // Head (larger, more imposing)
                     const head = new pc.Entity('Head');
                     head.addComponent('render', { type: 'sphere' });
-                    head.setLocalScale(0.22, 0.22, 0.22);
-                    head.setLocalPosition(0, 1.6, 0);
+                    head.setLocalScale(0.28, 0.3, 0.28); // Bigger head
+                    head.setLocalPosition(0, 1.88, 0);
                     head.render.material = matSkin;
                     opponent.addChild(head);
 
-                    // Hat/visor
-                    const hat = new pc.Entity('Hat');
-                    hat.addComponent('render', { type: 'cylinder' });
-                    hat.setLocalScale(0.26, 0.04, 0.26);
-                    hat.setLocalPosition(0, 1.72, 0);
-                    hat.render.material = matDark;
-                    opponent.addChild(hat);
+                    // HEADBAND (wrapped around head)
+                    const headband = new pc.Entity('Headband');
+                    headband.addComponent('render', { type: 'cylinder' });
+                    headband.setLocalScale(0.3, 0.06, 0.3); // Wide headband
+                    headband.setLocalPosition(0, 1.92, 0);
+                    headband.render.material = matHeadband;
+                    opponent.addChild(headband);
 
                     // Shorts
                     const shorts = new pc.Entity('Shorts');
                     shorts.addComponent('render', { type: 'box' });
-                    shorts.setLocalScale(0.38, 0.2, 0.24);
-                    shorts.setLocalPosition(0, 0.85, 0);
+                    shorts.setLocalScale(0.55, 0.28, 0.32); // Wider to match body
+                    shorts.setLocalPosition(0, 0.88, 0);
                     shorts.render.material = matShorts;
                     opponent.addChild(shorts);
 
-                    // Legs
+                    // Legs (MUSCULAR - thicker legs)
                     const addLeg = (xOff) => {
-                        const leg = new pc.Entity();
-                        leg.addComponent('render', { type: 'box' });
-                        leg.setLocalScale(0.12, 0.5, 0.12);
-                        leg.setLocalPosition(xOff, 0.5, 0);
-                        leg.render.material = matSkin;
-                        opponent.addChild(leg);
+                        // Upper leg (THICK thigh)
+                        const thigh = new pc.Entity();
+                        thigh.addComponent('render', { type: 'box' });
+                        thigh.setLocalScale(0.18, 0.38, 0.18); // Much thicker
+                        thigh.setLocalPosition(xOff, 0.56, 0);
+                        thigh.render.material = matSkin;
+                        opponent.addChild(thigh);
+
+                        // Lower leg (muscular calf)
+                        const calf = new pc.Entity();
+                        calf.addComponent('render', { type: 'box' });
+                        calf.setLocalScale(0.16, 0.34, 0.16); // Thicker calf
+                        calf.setLocalPosition(xOff, 0.26, 0);
+                        calf.render.material = matSkin;
+                        opponent.addChild(calf);
+
+                        // Shoe
                         const shoe = new pc.Entity();
                         shoe.addComponent('render', { type: 'box' });
-                        shoe.setLocalScale(0.14, 0.08, 0.2);
-                        shoe.setLocalPosition(xOff, 0.22, 0.04);
+                        shoe.setLocalScale(0.17, 0.1, 0.24);
+                        shoe.setLocalPosition(xOff, 0.07, 0.05);
                         shoe.render.material = matShoe;
                         opponent.addChild(shoe);
                     };
-                    addLeg(-0.1);
-                    addLeg(0.1);
+                    addLeg(-0.15);
+                    addLeg(0.15);
 
-                    // Left arm
+                    // Left arm (BIG MUSCLES - non-dominant but still bulky)
                     const oppArmL = new pc.Entity('OppArmL');
                     oppArmL.addComponent('render', { type: 'box' });
-                    oppArmL.setLocalScale(0.1, 0.4, 0.1);
-                    oppArmL.setLocalPosition(-0.28, 1.1, 0);
-                    oppArmL.setLocalEulerAngles(0, 0, 15);
+                    oppArmL.setLocalScale(0.16, 0.5, 0.16); // THICK upper arm
+                    oppArmL.setLocalPosition(-0.42, 1.2, 0.05);
+                    oppArmL.setLocalEulerAngles(10, 0, 20);
                     oppArmL.render.material = matSkin;
                     opponent.addChild(oppArmL);
 
-                    // Right arm + paddle (animated for smash)
+                    // Left forearm (muscular)
+                    const oppForearmL = new pc.Entity('OppForearmL');
+                    oppForearmL.addComponent('render', { type: 'box' });
+                    oppForearmL.setLocalScale(0.14, 0.38, 0.14); // Thick forearm
+                    oppForearmL.setLocalPosition(-0.5, 0.82, 0.12);
+                    oppForearmL.setLocalEulerAngles(25, 0, 15);
+                    oppForearmL.render.material = matSkin;
+                    opponent.addChild(oppForearmL);
+
+                    // Right arm (DOMINANT - MASSIVE MUSCLES for smashing)
                     const oppArmR = new pc.Entity('OppArmR');
                     oppArmR.addComponent('render', { type: 'box' });
-                    oppArmR.setLocalScale(0.1, 0.4, 0.1);
-                    oppArmR.setLocalPosition(0.28, 1.1, 0);
+                    oppArmR.setLocalScale(0.18, 0.52, 0.18); // HUGE upper arm
+                    oppArmR.setLocalPosition(0.42, 1.2, 0);
                     oppArmR.setLocalEulerAngles(0, 0, -30);
                     oppArmR.render.material = matSkin;
                     opponent.addChild(oppArmR);
 
+                    // Right forearm (POWERFUL)
+                    const oppForearmR = new pc.Entity('OppForearmR');
+                    oppForearmR.addComponent('render', { type: 'box' });
+                    oppForearmR.setLocalScale(0.15, 0.4, 0.15); // Thick powerful forearm
+                    oppForearmR.setLocalPosition(0.54, 0.85, 0.12);
+                    oppForearmR.setLocalEulerAngles(-20, 0, -25);
+                    oppForearmR.render.material = matSkin;
+                    opponent.addChild(oppForearmR);
+
                     const oppPaddle = new pc.Entity('OppPaddle');
                     oppPaddle.addComponent('render', { type: 'box' });
-                    oppPaddle.setLocalScale(0.18, 0.28, 0.02);
-                    oppPaddle.setLocalPosition(0.4, 0.95, 0.15);
-                    oppPaddle.setLocalEulerAngles(10, 0, -20);
+                    oppPaddle.setLocalScale(0.22, 0.35, 0.02); // Slightly bigger paddle
+                    oppPaddle.setLocalPosition(0.64, 0.68, 0.22);
+                    oppPaddle.setLocalEulerAngles(15, 0, -15);
                     oppPaddle.render.material = matPaddle;
                     opponent.addChild(oppPaddle);
 
                     // Smash animation state
                     let smashAnimT = -1; // -1 = not animating
                     const SMASH_DURATION = 0.25; // fast aggressive swing
-                    const oppArmRestPos = new pc.Vec3(0.28, 1.1, 0);
+                    const oppArmRestPos = new pc.Vec3(0.42, 1.2, 0);
                     const oppArmRestRot = new pc.Vec3(0, 0, -30);
-                    const oppPaddleRestPos = new pc.Vec3(0.4, 0.95, 0.15);
-                    const oppPaddleRestRot = new pc.Vec3(10, 0, -20);
+                    const oppForearmRestPos = new pc.Vec3(0.54, 0.85, 0.12);
+                    const oppForearmRestRot = new pc.Vec3(-20, 0, -25);
+                    const oppPaddleRestPos = new pc.Vec3(0.64, 0.68, 0.22);
+                    const oppPaddleRestRot = new pc.Vec3(15, 0, -15);
 
                     app.root.addChild(opponent);
 
@@ -665,18 +705,22 @@
                             if (t < 0.3) {
                                 // Wind up: arm goes way back and up (30% of time)
                                 const w = t / 0.3;
-                                oppArmR.setLocalPosition(0.28, 1.1 + w * 0.6, -w * 0.4);
-                                oppArmR.setLocalEulerAngles(-90 * w, 0, -30 + 30 * w);
-                                oppPaddle.setLocalPosition(0.4, 0.95 + w * 0.7, 0.15 - w * 0.5);
-                                oppPaddle.setLocalEulerAngles(10 - 110 * w, 0, -20 + 15 * w);
+                                oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y + w * 0.6, oppArmRestPos.z - w * 0.4);
+                                oppArmR.setLocalEulerAngles(oppArmRestRot.x - 90 * w, oppArmRestRot.y, oppArmRestRot.z + 30 * w);
+                                oppForearmR.setLocalPosition(oppForearmRestPos.x, oppForearmRestPos.y + w * 0.7, oppForearmRestPos.z - w * 0.5);
+                                oppForearmR.setLocalEulerAngles(oppForearmRestRot.x - 110 * w, oppForearmRestRot.y, oppForearmRestRot.z + 15 * w);
+                                oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y + w * 0.7, oppPaddleRestPos.z - w * 0.5);
+                                oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x - 110 * w, oppPaddleRestRot.y, oppPaddleRestRot.z + 15 * w);
                             } else {
                                 // Swing down HARD: explosive forward smash (70% of time)
                                 const s = (t - 0.3) / 0.7;
                                 const ease = 1 - Math.pow(1 - s, 2); // fast ease out
-                                oppArmR.setLocalPosition(0.28, 1.7 - ease * 0.8, -0.4 + ease * 0.7);
-                                oppArmR.setLocalEulerAngles(-90 + ease * 130, 0, 0 - ease * 30);
-                                oppPaddle.setLocalPosition(0.4, 1.65 - ease * 0.9, -0.35 + ease * 0.8);
-                                oppPaddle.setLocalEulerAngles(-100 + ease * 140, 0, -5);
+                                oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y + 0.6 - ease * 0.8, oppArmRestPos.z - 0.4 + ease * 0.7);
+                                oppArmR.setLocalEulerAngles(oppArmRestRot.x - 90 + ease * 130, oppArmRestRot.y, oppArmRestRot.z + 30 - ease * 30);
+                                oppForearmR.setLocalPosition(oppForearmRestPos.x, oppForearmRestPos.y + 0.7 - ease * 0.9, oppForearmRestPos.z - 0.5 + ease * 0.8);
+                                oppForearmR.setLocalEulerAngles(oppForearmRestRot.x - 110 + ease * 140, oppForearmRestRot.y, oppForearmRestRot.z + 15 - ease * 20);
+                                oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y + 0.7 - ease * 0.9, oppPaddleRestPos.z - 0.5 + ease * 0.8);
+                                oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x - 110 + ease * 140, oppPaddleRestRot.y, oppPaddleRestRot.z + 15 - ease * 20);
                             }
 
                             if (t >= 1) {
@@ -684,6 +728,8 @@
                                 smashAnimT = -1;
                                 oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y, oppArmRestPos.z);
                                 oppArmR.setLocalEulerAngles(oppArmRestRot.x, oppArmRestRot.y, oppArmRestRot.z);
+                                oppForearmR.setLocalPosition(oppForearmRestPos.x, oppForearmRestPos.y, oppForearmRestPos.z);
+                                oppForearmR.setLocalEulerAngles(oppForearmRestRot.x, oppForearmRestRot.y, oppForearmRestRot.z);
                                 oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y, oppPaddleRestPos.z);
                                 oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x, oppPaddleRestRot.y, oppPaddleRestRot.z);
                             }
@@ -712,8 +758,17 @@
                             // --- Shot categorization (after player has hit) ---
                             if (playerHasHit && gameState === 'PLAY') {
 
+                                // SHORT: ball bouncing on player's side (never reached net)
+                                if (bPos.z > 2 && bVel.z < 1 && bPos.y < 0.5) {
+                                    misses++;
+                                    updateScoreUI();
+                                    showMsg('SHORT!');
+                                    endRound();
+                                    return;
+                                }
+
                                 // SHORT: ball hit the net and bouncing back
-                                if (bPos.z > 0.3 && bVel.z > 0 && bVel.z < 3) {
+                                if (bPos.z > 0.3 && bPos.z < 2 && bVel.z > 0 && bVel.z < 3) {
                                     misses++;
                                     updateScoreUI();
                                     showMsg('SHORT!');
