@@ -316,59 +316,125 @@
                     netCol.setLocalPosition(0, NET_H / 2, 0);
                     app.root.addChild(netCol);
 
-                    // --- Opponent (Billboard Sprite) ---
+                    // --- Opponent (Bulky Muscular Right-handed player) ---
+                    const matSkin = createMaterial(new pc.Color(0.85, 0.65, 0.5));
+                    const matShirt = createMaterial(new pc.Color(0.2, 0.4, 0.8));
+                    const matShorts = createMaterial(new pc.Color(0.15, 0.15, 0.15));
+                    const matShoe = createMaterial(new pc.Color(1, 1, 1));
+                    const matHeadband = createMaterial(new pc.Color(0.9, 0.1, 0.1)); // Red headband
+
                     const opponent = new pc.Entity('Opponent');
-                    opponent.setLocalPosition(0, 0.9, -2.13); // Kitchen line, raised to center sprite
+                    // Kitchen line is at z = -2.13
+                    opponent.setLocalPosition(0, 0, -2.13);
 
-                    // Create a simple billboard sprite for the opponent
-                    // This can be replaced with an actual player image texture
-                    const oppSprite = new pc.Entity('OpponentSprite');
-                    oppSprite.addComponent('render', { type: 'plane' });
-                    oppSprite.setLocalScale(1.2, 1.8, 1); // Width x Height for player figure
-                    oppSprite.setLocalEulerAngles(90, 0, 0); // Rotate to stand upright and face camera
+                    // Torso (BULKY - wide and muscular)
+                    const torso = new pc.Entity('Torso');
+                    torso.addComponent('render', { type: 'box' });
+                    torso.setLocalScale(0.6, 0.7, 0.35); // Much wider and taller
+                    torso.setLocalPosition(0, 1.3, 0);
+                    torso.render.material = matShirt;
+                    opponent.addChild(torso);
 
-                    // Create a simple gradient material as placeholder
-                    // You can replace this with an actual image texture
-                    const oppMaterial = new pc.StandardMaterial();
-                    oppMaterial.diffuse = new pc.Color(0.3, 0.5, 0.9); // Blue tint
-                    oppMaterial.emissive = new pc.Color(0.15, 0.25, 0.35); // Brighter emissive for visibility
-                    oppMaterial.opacity = 1.0;
-                    oppMaterial.cull = pc.CULLFACE_NONE; // Double-sided so visible from both sides
-                    oppMaterial.update();
-                    oppSprite.render.material = oppMaterial;
+                    // Neck (thick, muscular)
+                    const neck = new pc.Entity('Neck');
+                    neck.addComponent('render', { type: 'cylinder' });
+                    neck.setLocalScale(0.15, 0.14, 0.15); // Thicker neck
+                    neck.setLocalPosition(0, 1.72, 0);
+                    neck.render.material = matSkin;
+                    opponent.addChild(neck);
 
-                    opponent.addChild(oppSprite);
+                    // Head (larger, more imposing)
+                    const head = new pc.Entity('Head');
+                    head.addComponent('render', { type: 'sphere' });
+                    head.setLocalScale(0.28, 0.3, 0.28); // Bigger head
+                    head.setLocalPosition(0, 1.88, 0);
+                    head.render.material = matSkin;
+                    opponent.addChild(head);
 
-                    // Paddle (visible sprite attached to opponent)
+                    // HEADBAND (wrapped around head)
+                    const headband = new pc.Entity('Headband');
+                    headband.addComponent('render', { type: 'cylinder' });
+                    headband.setLocalScale(0.3, 0.06, 0.3); // Wide headband
+                    headband.setLocalPosition(0, 1.92, 0);
+                    headband.render.material = matHeadband;
+                    opponent.addChild(headband);
+
+                    // Shorts
+                    const shorts = new pc.Entity('Shorts');
+                    shorts.addComponent('render', { type: 'box' });
+                    shorts.setLocalScale(0.55, 0.28, 0.32); // Wider to match body
+                    shorts.setLocalPosition(0, 0.88, 0);
+                    shorts.render.material = matShorts;
+                    opponent.addChild(shorts);
+
+                    // Legs (MUSCULAR - thicker legs)
+                    const addLeg = (xOff) => {
+                        // Upper leg (THICK thigh)
+                        const thigh = new pc.Entity();
+                        thigh.addComponent('render', { type: 'box' });
+                        thigh.setLocalScale(0.18, 0.38, 0.18); // Much thicker
+                        thigh.setLocalPosition(xOff, 0.56, 0);
+                        thigh.render.material = matSkin;
+                        opponent.addChild(thigh);
+
+                        // Lower leg (muscular calf)
+                        const calf = new pc.Entity();
+                        calf.addComponent('render', { type: 'box' });
+                        calf.setLocalScale(0.16, 0.34, 0.16); // Thicker calf
+                        calf.setLocalPosition(xOff, 0.26, 0);
+                        calf.render.material = matSkin;
+                        opponent.addChild(calf);
+
+                        // Shoe
+                        const shoe = new pc.Entity();
+                        shoe.addComponent('render', { type: 'box' });
+                        shoe.setLocalScale(0.17, 0.1, 0.24);
+                        shoe.setLocalPosition(xOff, 0.07, 0.05);
+                        shoe.render.material = matShoe;
+                        opponent.addChild(shoe);
+                    };
+                    addLeg(-0.15);
+                    addLeg(0.15);
+
+                    // Left arm (non-dominant, relaxed at side - single piece)
+                    const oppArmL = new pc.Entity('OppArmL');
+                    oppArmL.addComponent('render', { type: 'box' });
+                    oppArmL.setLocalScale(0.14, 0.7, 0.14); // Single arm piece
+                    oppArmL.setLocalPosition(-0.42, 1.0, 0.05);
+                    oppArmL.setLocalEulerAngles(10, 0, 15);
+                    oppArmL.render.material = matSkin;
+                    opponent.addChild(oppArmL);
+
+                    // Right arm (DOMINANT - MASSIVE MUSCLES for smashing, single piece)
+                    const oppArmR = new pc.Entity('OppArmR');
+                    oppArmR.addComponent('render', { type: 'box' });
+                    oppArmR.setLocalScale(0.16, 0.75, 0.16); // Single thick arm
+                    oppArmR.setLocalPosition(0.42, 1.0, 0);
+                    oppArmR.setLocalEulerAngles(0, 0, -20);
+                    oppArmR.render.material = matSkin;
+                    opponent.addChild(oppArmR);
+
                     const oppPaddle = new pc.Entity('OppPaddle');
                     oppPaddle.addComponent('render', { type: 'box' });
                     oppPaddle.setLocalScale(0.22, 0.35, 0.02);
-                    oppPaddle.setLocalPosition(0.5, -0.3, 0.1); // Right side, lower position
+                    oppPaddle.setLocalPosition(0.5, 0.58, 0.18);
                     oppPaddle.setLocalEulerAngles(15, 0, -10);
                     oppPaddle.render.material = matPaddle;
                     opponent.addChild(oppPaddle);
 
-                    // Smash animation state (simplified for sprite)
-                    let smashAnimT = -1;
-                    const SMASH_DURATION = 0.25;
-                    const oppPaddleRestPos = new pc.Vec3(0.5, -0.3, 0.1);
+                    // Smash animation state
+                    let smashAnimT = -1; // -1 = not animating
+                    const SMASH_DURATION = 0.25; // fast aggressive swing
+                    const oppArmRestPos = new pc.Vec3(0.42, 1.0, 0);
+                    const oppArmRestRot = new pc.Vec3(0, 0, -20);
+                    const oppPaddleRestPos = new pc.Vec3(0.5, 0.58, 0.18);
                     const oppPaddleRestRot = new pc.Vec3(15, 0, -10);
 
                     app.root.addChild(opponent);
 
-                    // TODO: To use an actual image, load it like this:
-                    // const asset = new pc.Asset('opponent-image', 'texture', { url: 'path/to/player-image.png' });
-                    // app.assets.add(asset);
-                    // app.assets.load(asset);
-                    // asset.ready(() => {
-                    //     oppMaterial.diffuseMap = asset.resource;
-                    //     oppMaterial.update();
-                    // });
-
                     // --- Gameplay Entities ---
 
                     // Ball
-                    const ball = new pc.Entity('Ball');
                     ball.addComponent('render', { type: 'sphere' });
                     ball.render.material = matBall;
                     ball.setLocalScale(BALL_R * 2, BALL_R * 2, BALL_R * 2);
@@ -610,19 +676,24 @@
                         const bPos = ball.getPosition();
                         const bVel = ball.rigidbody.linearVelocity;
 
-                        // --- Smash animation (simplified for sprite) ---
+                        // --- Smash animation ---
                         if (smashAnimT >= 0) {
                             smashAnimT += dt;
                             const t = Math.min(smashAnimT / SMASH_DURATION, 1);
 
                             if (t < 0.3) {
-                                // Wind up: paddle goes back and up
-                                oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y + t / 0.3 * 0.7, oppPaddleRestPos.z - t / 0.3 * 0.5);
-                                oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x - 110 * (t / 0.3), oppPaddleRestRot.y, oppPaddleRestRot.z + 15 * (t / 0.3));
+                                // Wind up: arm goes back and up
+                                const w = t / 0.3;
+                                oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y + w * 0.6, oppArmRestPos.z - w * 0.4);
+                                oppArmR.setLocalEulerAngles(oppArmRestRot.x - 90 * w, oppArmRestRot.y, oppArmRestRot.z + 30 * w);
+                                oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y + w * 0.7, oppPaddleRestPos.z - w * 0.5);
+                                oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x - 110 * w, oppPaddleRestRot.y, oppPaddleRestRot.z + 15 * w);
                             } else {
                                 // Swing down HARD: explosive forward smash
                                 const s = (t - 0.3) / 0.7;
                                 const ease = 1 - Math.pow(1 - s, 2);
+                                oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y + 0.6 - ease * 0.8, oppArmRestPos.z - 0.4 + ease * 0.7);
+                                oppArmR.setLocalEulerAngles(oppArmRestRot.x - 90 + ease * 130, oppArmRestRot.y, oppArmRestRot.z + 30 - ease * 30);
                                 oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y + 0.7 - ease * 0.9, oppPaddleRestPos.z - 0.5 + ease * 0.8);
                                 oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x - 110 + ease * 140, oppPaddleRestRot.y, oppPaddleRestRot.z + 15 - ease * 20);
                             }
@@ -630,6 +701,8 @@
                             if (t >= 1) {
                                 // Reset to rest pose
                                 smashAnimT = -1;
+                                oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y, oppArmRestPos.z);
+                                oppArmR.setLocalEulerAngles(oppArmRestRot.x, oppArmRestRot.y, oppArmRestRot.z);
                                 oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y, oppPaddleRestPos.z);
                                 oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x, oppPaddleRestRot.y, oppPaddleRestRot.z);
                             }
