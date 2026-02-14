@@ -61,7 +61,7 @@
         let paddleX = 0.5;
         const PADDLE_W = 0.18;
         const PADDLE_H_PX = 30;
-        const PADDLE_Y_RATIO = 0.92;
+        const PADDLE_Y_RATIO = 0.85;
         let paddleForward = 0; // 0-1, how far paddle has lunged forward during swing
 
         // Opponent
@@ -126,10 +126,10 @@
 
             // Perspective court lines
             const cx = w / 2;
-            const baseLeft = w * 0.02;
-            const baseRight = w * 0.98;
-            const topLeft = cx - w * 0.15;
-            const topRight = cx + w * 0.15;
+            const baseLeft = w * -0.15;
+            const baseRight = w * 1.15;
+            const topLeft = cx - w * 0.18;
+            const topRight = cx + w * 0.18;
 
             ctx.strokeStyle = 'rgba(255,255,255,0.5)';
             ctx.lineWidth = 3;
