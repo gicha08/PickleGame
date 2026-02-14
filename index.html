@@ -6,7 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pocket Pickleball (PlayCanvas)</title>
     <style>
+        html,
         body {
+            width: 100%;
+            height: 100%;
             margin: 0;
             overflow: hidden;
             background: #0a0a0a;
@@ -89,8 +92,8 @@
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
 
-    <!-- PlayCanvas Engine -->
-    <script src="https://code.playcanvas.com/playcanvas-stable.min.js"></script>
+    <!-- PlayCanvas Engine (pinned v2.6.0) -->
+    <script src="https://code.playcanvas.com/playcanvas-2.6.0.min.js"></script>
     <!-- Ammo.js Physics -->
     <script src="https://code.playcanvas.com/ammo.751ec5f.js"></script>
 </head>
@@ -118,22 +121,32 @@
     <script>
         // Use an IIFE to keep global scope clean
         (function () {
-            // Wait for Ammo to load
+            const startApp = () => {
+                if (typeof Ammo === 'function') {
+                    // Likely WASM build, needs initialization
+                    Ammo().then(initGame);
+                } else {
+                    // Likely asm.js build or already initialized
+                    initGame();
+                }
+            };
+
             if (typeof Ammo !== 'undefined') {
-                initGame();
+                startApp();
             } else {
-                // If loaded via script tag async (though here it's sync), just in case
-                window.onload = function () {
+                window.addEventListener('load', () => {
                     if (typeof Ammo !== 'undefined') {
-                        initGame();
+                        startApp();
                     } else {
-                        // Sometimes the WASM version needs explicit initialization
-                        Ammo().then(initGame);
+                        console.error("Ammo.js failed to load!");
                     }
-                };
+                });
             }
 
             function initGame() {
+                try {
+                console.log('[PocketPickleball] initGame called, Ammo type:', typeof Ammo);
+
                 // --- Constants ---
                 const COURT_W = 6.1;
                 const COURT_L = 13.41;
@@ -148,7 +161,6 @@
                     elementInput: new pc.ElementInput(canvas),
                     keyboard: new pc.Keyboard(window)
                 });
-                app.start();
 
                 // Set fill mode to fill the window
                 app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
@@ -284,19 +296,15 @@
                 postR.render.material = matDark;
 
                 net.addChild(netVis); net.addChild(tape); net.addChild(postL); net.addChild(postR);
-                // Physics
-                net.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2 + 0.2, NET_H / 2, 0.05) });
-                net.addComponent('rigidbody', { type: 'static' });
                 net.setLocalPosition(0, 0, 0);
-                // Collider offset
-                // PlayCanvas RB center is entity center. We need to match visual.
-                // Or just create a separate collider entity.
+                app.root.addChild(net);
+
+                // Net collider - separate entity so collision center matches visual center
                 const netCol = new pc.Entity('NetCollider');
                 netCol.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2 + 0.2, NET_H / 2, 0.05) });
                 netCol.addComponent('rigidbody', { type: 'static' });
                 netCol.setLocalPosition(0, NET_H / 2, 0);
                 app.root.addChild(netCol);
-                app.root.addChild(net);
 
                 // --- Gameplay Entities ---
 
@@ -462,12 +470,6 @@
                     }
                 });
 
-                // Disable old physics collision for hitting (keep body for visual/blocking if needed, but logic is now in pointerup)
-                paddle.collision.off('collisionstart');
-
-                // Update Loop
-                let timeSinceDead = 0;
-
                 // Custom Input Handling for Raycast
                 window.addEventListener('pointermove', (e) => {
                     // Convert to -1..1
@@ -511,12 +513,8 @@
                     }
                 });
 
-
-                window.addEventListener('pointerdown', () => {
-                    if (gameState === 'IDLE') serve();
-                });
-
                 // Game Loop Logic
+                console.log('[PocketPickleball] Setting up game loop...');
                 app.on('update', (dt) => {
                     if (gameState === 'PLAY' && ball.enabled) {
                         const bPos = ball.getPosition();
@@ -548,6 +546,16 @@
                         }
                     }
                 });
+
+                // Start app AFTER all entities and listeners are set up
+                app.start();
+                console.log('[PocketPickleball] App started successfully');
+
+                } catch (err) {
+                    console.error('[PocketPickleball] Init error:', err);
+                    document.getElementById('message').innerText = 'Error: ' + err.message;
+                    document.getElementById('message').classList.add('show');
+                }
             }
         })();
     </script>
