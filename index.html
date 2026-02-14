@@ -497,9 +497,9 @@
                         ball.rigidbody.activate();
 
                         // Aim straight at the player (camera z~9, paddle z~6.5)
-                        // Strong arc toward center of player's court - travels far with one bounce
-                        const vz = 8 + Math.random() * 4; // Increased from 5-7 to 8-12 for longer distance
-                        const vy = 3.5 + Math.random() * 2; // Increased from 2-3 to 3.5-5.5 for higher arc
+                        // Moderate arc toward center of player's court - one clean bounce
+                        const vz = 6 + Math.random() * 3; // Balanced: 6-9 for good distance without being too long
+                        const vy = 2.5 + Math.random() * 1.5; // Balanced: 2.5-4 for proper arc
                         const vx = (Math.random() - 0.5) * 0.5; // very little lateral drift
 
                         ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
