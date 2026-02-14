@@ -376,20 +376,24 @@
                 addLeg(-0.1);
                 addLeg(0.1);
 
-                // Arms
-                const addArm = (xOff, rz) => {
-                    const arm = new pc.Entity();
-                    arm.addComponent('render', { type: 'box' });
-                    arm.setLocalScale(0.1, 0.4, 0.1);
-                    arm.setLocalPosition(xOff, 1.1, 0);
-                    arm.setLocalEulerAngles(0, 0, rz);
-                    arm.render.material = matSkin;
-                    opponent.addChild(arm);
-                };
-                addArm(-0.28, 15);  // left arm slightly out
-                addArm(0.28, -30);  // right arm holding paddle
+                // Left arm
+                const oppArmL = new pc.Entity('OppArmL');
+                oppArmL.addComponent('render', { type: 'box' });
+                oppArmL.setLocalScale(0.1, 0.4, 0.1);
+                oppArmL.setLocalPosition(-0.28, 1.1, 0);
+                oppArmL.setLocalEulerAngles(0, 0, 15);
+                oppArmL.render.material = matSkin;
+                opponent.addChild(oppArmL);
 
-                // Opponent paddle
+                // Right arm + paddle (animated for smash)
+                const oppArmR = new pc.Entity('OppArmR');
+                oppArmR.addComponent('render', { type: 'box' });
+                oppArmR.setLocalScale(0.1, 0.4, 0.1);
+                oppArmR.setLocalPosition(0.28, 1.1, 0);
+                oppArmR.setLocalEulerAngles(0, 0, -30);
+                oppArmR.render.material = matSkin;
+                opponent.addChild(oppArmR);
+
                 const oppPaddle = new pc.Entity('OppPaddle');
                 oppPaddle.addComponent('render', { type: 'box' });
                 oppPaddle.setLocalScale(0.18, 0.28, 0.02);
@@ -397,6 +401,14 @@
                 oppPaddle.setLocalEulerAngles(10, 0, -20);
                 oppPaddle.render.material = matPaddle;
                 opponent.addChild(oppPaddle);
+
+                // Smash animation state
+                let smashAnimT = -1; // -1 = not animating
+                const SMASH_DURATION = 0.35;
+                const oppArmRestPos = new pc.Vec3(0.28, 1.1, 0);
+                const oppArmRestRot = new pc.Vec3(0, 0, -30);
+                const oppPaddleRestPos = new pc.Vec3(0.4, 0.95, 0.15);
+                const oppPaddleRestRot = new pc.Vec3(10, 0, -20);
 
                 app.root.addChild(opponent);
 
@@ -440,6 +452,7 @@
                 paddle.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(0.3, 0.4, 0.1) });
                 paddle.addComponent('rigidbody', { type: 'kinematic' });
                 paddle.setPosition(0, 1, 6.5);
+                paddle.enabled = false; // Only show while finger is on screen
                 app.root.addChild(paddle);
 
                 // --- Logic & State ---
@@ -480,29 +493,39 @@
                     ball.enabled = true;
                     // Serve from opponent at kitchen line
                     const oppPos = opponent.getPosition();
-                    const sx = oppPos.x + (Math.random() - 0.5) * 0.5;
-                    ball.rigidbody.teleport(sx, 1.3, oppPos.z);
+                    ball.rigidbody.teleport(oppPos.x, 1.3, oppPos.z);
                     ball.rigidbody.activate();
 
-                    // Controlled serve toward player - always reachable
-                    const vz = 6 + Math.random() * 3;
-                    const vy = 2.5 + Math.random() * 1.5;
-                    const vx = (Math.random() - 0.5) * 2;
+                    // Aim straight at the player (camera z~9, paddle z~6.5)
+                    // Gentle arc toward center of player's court
+                    const vz = 5 + Math.random() * 2;
+                    const vy = 2 + Math.random() * 1;
+                    const vx = (Math.random() - 0.5) * 0.5; // very little lateral drift
 
                     ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
                     document.getElementById('hint').style.opacity = 0;
                 };
 
-                // Opponent smash - sends ball back hard
+                // Opponent smash - sends ball back hard + animate
                 const opponentSmash = () => {
                     gameState = 'RETURN';
+                    smashAnimT = 0; // start smash animation
+
+                    // Teleport ball to opponent paddle for visual impact
+                    const oppPos = opponent.getPosition();
+                    ball.rigidbody.teleport(oppPos.x + 0.3, 1.5, oppPos.z + 0.2);
                     ball.rigidbody.activate();
-                    const vz = 8 + Math.random() * 4;
-                    const vy = 2 + Math.random() * 2;
-                    const vx = (Math.random() - 0.5) * 4;
-                    ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
-                    ball.rigidbody.angularVelocity = new pc.Vec3(-15, 0, 0);
-                    showMsg('SMASHED!');
+
+                    // Delay the actual hit slightly to sync with animation
+                    setTimeout(() => {
+                        if (gameState !== 'RETURN') return;
+                        const vz = 7 + Math.random() * 3;
+                        const vy = 1.5 + Math.random() * 1;
+                        const vx = (Math.random() - 0.5) * 2;
+                        ball.rigidbody.activate();
+                        ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
+                        ball.rigidbody.angularVelocity = new pc.Vec3(-15, 0, 0);
+                    }, 150);
                 };
 
                 // Paddle Control
@@ -525,6 +548,7 @@
 
                 // Input Listeners for Swipe
                 window.addEventListener('pointerdown', (e) => {
+                    paddle.enabled = true;
                     if (gameState === 'IDLE') {
                         serve();
                     } else if (gameState === 'PLAY') {
@@ -535,6 +559,7 @@
                 });
 
                 window.addEventListener('pointerup', (e) => {
+                    paddle.enabled = false;
                     if (!isSwiping || gameState !== 'PLAY') return;
                     isSwiping = false;
 
@@ -617,17 +642,54 @@
                 });
 
                 // Game Loop Logic
-                console.log('[PocketPickleball] Setting up game loop...');
                 const KITCHEN_Z = -2.13;
-                const OPP_REACH_HEIGHT = 1.4; // ball height opponent can reach to smash
+                const OPP_REACH_HEIGHT = 1.6; // head height - only smash if ball is this high or above
+                const NEXT_BALL_DELAY = 1200; // ms before next serve
+
+                const endRound = () => {
+                    gameState = 'IDLE';
+                    resetBall();
+                    setTimeout(() => { if (gameState === 'IDLE') serve(); }, NEXT_BALL_DELAY);
+                };
 
                 app.on('update', (dt) => {
                     const bPos = ball.getPosition();
                     const bVel = ball.rigidbody.linearVelocity;
 
+                    // --- Smash animation ---
+                    if (smashAnimT >= 0) {
+                        smashAnimT += dt;
+                        const t = Math.min(smashAnimT / SMASH_DURATION, 1);
+
+                        if (t < 0.4) {
+                            // Wind up: arm goes back and up
+                            const w = t / 0.4;
+                            oppArmR.setLocalPosition(0.28, 1.1 + w * 0.4, -w * 0.2);
+                            oppArmR.setLocalEulerAngles(-60 * w, 0, -30 + 20 * w);
+                            oppPaddle.setLocalPosition(0.4, 0.95 + w * 0.5, 0.15 - w * 0.3);
+                            oppPaddle.setLocalEulerAngles(10 - 80 * w, 0, -20 + 10 * w);
+                        } else {
+                            // Swing down: fast forward smash
+                            const s = (t - 0.4) / 0.6;
+                            const ease = 1 - Math.pow(1 - s, 3); // ease out
+                            oppArmR.setLocalPosition(0.28, 1.5 - ease * 0.5, -0.2 + ease * 0.4);
+                            oppArmR.setLocalEulerAngles(-60 + ease * 90, 0, -10 - ease * 20);
+                            oppPaddle.setLocalPosition(0.4, 1.45 - ease * 0.6, -0.15 + ease * 0.5);
+                            oppPaddle.setLocalEulerAngles(-70 + ease * 100, 0, -10);
+                        }
+
+                        if (t >= 1) {
+                            // Reset to rest pose
+                            smashAnimT = -1;
+                            oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y, oppArmRestPos.z);
+                            oppArmR.setLocalEulerAngles(oppArmRestRot.x, oppArmRestRot.y, oppArmRestRot.z);
+                            oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y, oppPaddleRestPos.z);
+                            oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x, oppPaddleRestRot.y, oppPaddleRestRot.z);
+                        }
+                    }
+
                     // --- Opponent AI: track ball laterally ---
                     if (ball.enabled) {
-                        // Target the ball's x when it's heading toward opponent
                         if (bVel.z < 0) {
                             oppTargetX = bPos.x;
                         }
@@ -649,10 +711,27 @@
                         // --- Shot categorization (only after player has hit) ---
                         if (playerHasHit && gameState === 'PLAY') {
 
-                            // TOO HIGH: ball enters opponent zone above reach height
-                            // Opponent intercepts and smashes back
-                            if (bPos.z < KITCHEN_Z && bPos.y > OPP_REACH_HEIGHT) {
-                                // Too high - opponent smashes it
+                            // SHORT: ball bouncing back toward player after hitting net
+                            if (bPos.z > 0.3 && bVel.z > 0) {
+                                misses++;
+                                updateScoreUI();
+                                showMsg('SHORT!');
+                                endRound();
+                                return;
+                            }
+
+                            // GOOD DROP: ball is low in kitchen zone
+                            if (bPos.z < 0 && bPos.z > KITCHEN_Z && bPos.y < 0.2) {
+                                goodDrops++;
+                                updateScoreUI();
+                                showMsg('GOOD DROP!');
+                                endRound();
+                                return;
+                            }
+
+                            // TOO HIGH: ball crosses into opponent zone above net
+                            // Opponent can reach it - smash back
+                            if (bPos.z < -0.3 && bPos.y > OPP_REACH_HEIGHT) {
                                 misses++;
                                 updateScoreUI();
                                 showMsg('TOO HIGH!');
@@ -661,52 +740,20 @@
                                 return;
                             }
 
-                            // Ball at net height check - SHORT (hit the net)
-                            // Net collision handles this physically, but also check
-                            // if ball bounces back to player side
-                            if (bPos.z > 0.5 && bVel.z > 0 && playerHasHit) {
-                                // Ball bouncing back toward player = SHORT
+                            // Ball past kitchen and low = opponent still gets it
+                            if (bPos.z < KITCHEN_Z && bPos.y < OPP_REACH_HEIGHT && bPos.y > 0) {
                                 misses++;
                                 updateScoreUI();
-                                showMsg('SHORT!');
-                                gameState = 'IDLE';
-                                resetBall();
-                                setTimeout(() => { if (gameState === 'IDLE') serve(); }, 2000);
-                                return;
-                            }
-
-                            // GOOD DROP: ball lands in kitchen zone (between net and kitchen line)
-                            if (bPos.z < 0 && bPos.z > KITCHEN_Z && bPos.y < 0.15) {
-                                // Ball is low in the kitchen = good drop!
-                                goodDrops++;
-                                updateScoreUI();
-                                showMsg('GOOD DROP!');
-                                gameState = 'IDLE';
-                                resetBall();
-                                setTimeout(() => { if (gameState === 'IDLE') serve(); }, 2000);
-                                return;
-                            }
-
-                            // Ball lands past kitchen line but low = opponent reaches it
-                            if (bPos.z < KITCHEN_Z && bPos.y < OPP_REACH_HEIGHT && bPos.y > -0.1) {
-                                // Opponent can reach this - smash back
-                                misses++;
-                                updateScoreUI();
-                                showMsg('TOO HIGH!');
+                                showMsg('TOO DEEP!');
                                 opponentSmash();
                                 playerHasHit = false;
                                 return;
                             }
                         }
 
-                        // Ball out of bounds or fell through
-                        if (Math.abs(bPos.z) > 15 || bPos.y < -1) {
-                            if (gameState === 'RETURN') {
-                                // Opponent's smash went out - doesn't count
-                            }
-                            gameState = 'IDLE';
-                            resetBall();
-                            setTimeout(() => { if (gameState === 'IDLE') serve(); }, 2000);
+                        // Ball out of bounds or fell through - end quickly
+                        if (Math.abs(bPos.z) > 12 || bPos.y < -0.5) {
+                            endRound();
                         }
                     }
                 });
