@@ -960,54 +960,38 @@
 
                                 // Ball crossed the net (z < 0)
                                 if (bPos.z < -0.3) {
-                                    // 1. Capture height as it reaches the opponent's strike zone (z = -2.0)
-                                    if (bPos.z <= -2.0 && heightAtCrossing === -1) {
-                                        heightAtCrossing = bPos.y;
-                                    }
-
-                                    // 2. ABSOLUTE HIGH BALL RULE: If un-bounced and above Reach Height (1.4m) in strike zone
-                                    if (!ballHasBounced && bPos.z <= -2.1 && bPos.y >= OPP_REACH_HEIGHT) {
-                                        highBalls++;
-                                        updateScoreUI();
-                                        showMsg('HIGH BALL!', 'high');
-
-                                        // SNAP opponent to ball for guaranteed smash
-                                        const currentPos = opponent.getPosition();
-                                        opponent.setPosition(bPos.x + 0.5, 0, currentPos.z);
-
-                                        opponentSmash();
-                                        playerHasHit = false;
-                                        return;
-                                    }
-
-                                    // 3. Check for bounce (Categorize Good vs Fair based on crossing height)
+                                    // CATEGORIZATION EVENT: Either it hits the ground OR it reaches the opponent's line
                                     const hitGround = (bPos.y < 0.25 && bVel.y < 0);
-                                    if ((hitGround || bPos.y < 0.1) && !ballHasBounced) {
-                                        ballHasBounced = true;
+                                    const reachedOpponent = (bPos.z <= -2.1);
 
-                                        // If it hit the ground behind the opponent un-smashed, it was too low to be a High Ball
-                                        // but we still check if it's in or out
-                                        if (bPos.z > -COURT_L / 2) {
-                                            const h = (heightAtCrossing === -1) ? bPos.y : heightAtCrossing;
+                                    if ((hitGround || reachedOpponent) && !ballHasBounced) {
+                                        ballHasBounced = true; // Mark as processed for this round
+                                        const h = bPos.y; // Height at the moment of categorization
 
-                                            if (h < 1.1) { // Below Waist (1.1m)
-                                                goodDrops++;
-                                                showMsg('GOOD DROP!', 'good');
-                                            } else { // Between Good Height and Reach Height (1.1m - 1.6m)
-                                                fairDrops++;
-                                                showMsg('FAIR DROP!', 'fair');
-                                            }
-                                            updateScoreUI();
-                                            endRound();
-                                            return;
+                                        if (h < 1.1) {
+                                            goodDrops++;
+                                            showMsg('GOOD DROP!', 'good');
+                                        } else if (h < 1.6) {
+                                            fairDrops++;
+                                            showMsg('FAIR DROP!', 'fair');
                                         } else {
-                                            // Ball went un-bounced past baseline (Too Deep / Long)
                                             highBalls++;
-                                            updateScoreUI();
-                                            showMsg('TOO DEEP!', 'high');
-                                            endRound();
-                                            return;
+                                            showMsg('HIGH BALL!', 'high');
+
+                                            // If it's a high ball when reaching the opponent, trigger the visual smash
+                                            if (reachedOpponent) {
+                                                const currentPos = opponent.getPosition();
+                                                opponent.setPosition(bPos.x + 0.5, 0, currentPos.z);
+                                                opponentSmash();
+                                                playerHasHit = false;
+                                                updateScoreUI();
+                                                return;
+                                            }
                                         }
+
+                                        updateScoreUI();
+                                        endRound();
+                                        return;
                                     }
                                 }
                             }
