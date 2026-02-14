@@ -810,10 +810,11 @@
 
                                 // Ball crossed the net (z < 0)
                                 if (bPos.z < -0.3) {
-                                    // 1. Check for ball bounce
-                                    const hitGround = (bPos.y < 0.2 && bVel.y < 0);
+                                    // 1. Check for ball bounce (The "Success" condition)
+                                    // Increased height threshold (0.25) to catch bounce frames reliably
+                                    const hitGround = (bPos.y < 0.25 && bVel.y < 0);
 
-                                    if (hitGround && !ballHasBounced) {
+                                    if ((hitGround || bPos.y < 0.1) && !ballHasBounced) {
                                         ballHasBounced = true;
                                         if (bPos.z > KITCHEN_Z) {
                                             // Bounced in kitchen!
@@ -827,9 +828,17 @@
                                             updateScoreUI();
                                             endRound();
                                             return;
+                                        } else if (bPos.z > -COURT_L / 2) {
+                                            // Bounced deep but INSIDE the court!
+                                            // User requested bounded balls count as good drops
+                                            fairDrops++;
+                                            updateScoreUI();
+                                            showMsg('FAIR DROP!');
+                                            endRound();
+                                            return;
                                         } else {
-                                            // Bounced deep - counts as a miss/high ball for the player
-                                            highBalls++;
+                                            // Out of bounds (back)
+                                            highBalls++; // Count as miss for deep out
                                             updateScoreUI();
                                             showMsg('TOO DEEP!');
                                             endRound();
@@ -838,21 +847,15 @@
                                     }
 
                                     // 2. Check for interception (SMASH)
-                                    // ONLY smash if it hasn't bounced yet and is in the strike zone
+                                    // ONLY smash if it hasn't bounced yet, is in strike zone, and is HIGH
                                     if (!ballHasBounced && bPos.z < -2.0) {
-                                        // Redefined High Ball: Must be significantly higher than the net
-                                        // and must be either rising or very high un-bounced
-                                        const isTooHigh = bPos.y > NET_H + 0.8; // Raised from 0.6
+                                        const isTooHigh = bPos.y > NET_H + 0.8;
                                         const isTooDeep = bPos.z < KITCHEN_Z - 0.4;
-                                        const isRising = bVel.y > 0;
 
-                                        // A ball is a "High Ball" if it's un-bounced and:
-                                        // - It's above head height
-                                        // - OR it's deep and high enough to be smashed
                                         if (isTooHigh || (isTooDeep && bPos.y > NET_H + 0.5)) {
-                                            // Don't smash if it's a drop (descending into kitchen)
-                                            if (bVel.y < -1 && bPos.z > -2.3) {
-                                                // Let it fall!
+                                            // Safeguard: Never smash if the ball is already low or falling fast into the kitchen
+                                            if (bPos.y < NET_H + 0.4 || (bVel.y < -0.5 && bPos.z > -2.3)) {
+                                                // Let it fall! It's a drop!
                                             } else {
                                                 highBalls++;
                                                 updateScoreUI();
