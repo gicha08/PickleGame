@@ -3,141 +3,809 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Swipe Prototype</title>
+    <title>Pocket Pickleball</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden; /* Prevent scrolling */
-            background-color: #1a1a1a;
-            font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            background: #1a1a1a;
+            overflow: hidden;
+            touch-action: none;
             height: 100vh;
-            touch-action: none; /* Crucial: stops browser gestures */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
-
-        #game-container {
+        #game-wrapper {
+            width: 100vw;
+            max-width: 430px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             position: relative;
-            width: 300px;
-            height: 300px;
-            background-color: #333;
-            border: 2px solid #555;
-            border-radius: 10px;
         }
-
-        #player {
-            position: absolute;
-            width: 50px;
-            height: 50px;
-            background-color: #ff4757;
-            border-radius: 8px;
-            top: 125px; /* Center (300/2 - 50/2) */
-            left: 125px;
-            transition: all 0.2s ease-out; /* Smooth movement */
-            box-shadow: 0 0 15px rgba(255, 71, 87, 0.5);
-        }
-
-        #info {
-            position: absolute;
-            top: -40px;
+        canvas {
+            display: block;
             width: 100%;
-            text-align: center;
-            color: white;
+            height: 100%;
         }
     </style>
 </head>
 <body>
-
-    <div id="game-container">
-        <div id="info">Swipe to move the square!</div>
-        <div id="player"></div>
+    <div id="game-wrapper">
+        <canvas id="game"></canvas>
     </div>
 
     <script>
-        const player = document.getElementById('player');
-        const container = document.getElementById('game-container');
-        const boundary = 250; // 300px container - 50px player
-        const minSwipeDist = 20; // Minimum swipe distance in px
-        const speedMultiplier = 0.3; // Scales speed into movement distance
-        const minMove = 20; // Minimum movement in px
-        const maxMove = 200; // Cap so it doesn't fly off
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('game-wrapper');
 
-        let startX, startY, startTime;
-        let currentPos = { x: 125, y: 125 };
-
-        // Touch events
-        window.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            startX = e.touches[0].clientX;
-            startY = e.touches[0].clientY;
-            startTime = Date.now();
-        }, { passive: false });
-
-        window.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            const endX = e.changedTouches[0].clientX;
-            const endY = e.changedTouches[0].clientY;
-            const elapsed = Math.max(Date.now() - startTime, 10); // ms, avoid div by 0
-
-            const diffX = endX - startX;
-            const diffY = endY - startY;
-            const swipeDist = Math.sqrt(diffX * diffX + diffY * diffY);
-
-            if (swipeDist < minSwipeDist) return; // Too small, ignore
-
-            // Speed = pixels per millisecond
-            const speed = swipeDist / elapsed;
-
-            // Movement distance scales with speed
-            const moveDist = Math.min(maxMove, Math.max(minMove, speed * speedMultiplier * 200));
-
-            // Normalize direction so diagonal swipes work
-            const normX = diffX / swipeDist;
-            const normY = diffY / swipeDist;
-
-            // Apply movement in the swipe direction
-            currentPos.x = Math.max(0, Math.min(boundary, currentPos.x + normX * moveDist));
-            currentPos.y = Math.max(0, Math.min(boundary, currentPos.y + normY * moveDist));
-
-            updatePlayerPosition();
-        }, { passive: false });
-
-        // Mouse events for desktop testing
-        window.addEventListener('mousedown', (e) => {
-            startX = e.clientX;
-            startY = e.clientY;
-            startTime = Date.now();
-        });
-
-        window.addEventListener('mouseup', (e) => {
-            const endX = e.clientX;
-            const endY = e.clientY;
-            const elapsed = Math.max(Date.now() - startTime, 10);
-
-            const diffX = endX - startX;
-            const diffY = endY - startY;
-            const swipeDist = Math.sqrt(diffX * diffX + diffY * diffY);
-
-            if (swipeDist < minSwipeDist) return;
-
-            const speed = swipeDist / elapsed;
-            const moveDist = Math.min(maxMove, Math.max(minMove, speed * speedMultiplier * 200));
-
-            const normX = diffX / swipeDist;
-            const normY = diffY / swipeDist;
-
-            currentPos.x = Math.max(0, Math.min(boundary, currentPos.x + normX * moveDist));
-            currentPos.y = Math.max(0, Math.min(boundary, currentPos.y + normY * moveDist));
-
-            updatePlayerPosition();
-        });
-
-        function updatePlayerPosition() {
-            player.style.left = currentPos.x + 'px';
-            player.style.top = currentPos.y + 'px';
+        function resize() {
+            const rect = wrapper.getBoundingClientRect();
+            canvas.width = rect.width * 2;
+            canvas.height = rect.height * 2;
         }
+        resize();
+        window.addEventListener('resize', resize);
+
+        // --- Game State ---
+        const W = () => canvas.width;
+        const H = () => canvas.height;
+
+        const NET_Y_RATIO = 0.38;
+        const VANISH_Y_RATIO = 0.18;
+
+        // Paddle
+        let paddleX = 0.5;
+        const PADDLE_W = 0.18;
+        const PADDLE_H_PX = 30;
+        const PADDLE_Y_RATIO = 0.92;
+
+        // Opponent
+        let opponentX = 0.5;
+        let opponentTargetX = 0.5;
+        let opponentSwingPhase = 0;
+
+        // Ball
+        let ball = null;
+        const BALL_SPEED_INCOMING = 0.012;
+        const BALL_SPEED_RETURNING = 0.014;
+
+        // Swipe tracking
+        let swipeStartX = 0;
+        let swipeStartY = 0;
+        let swipeStartTime = 0;
+        let isSwiping = false;
+        let lastSwipeSpeed = 0; // for UI feedback
+
+        // Score
+        let playerScore = 0;
+        let opponentScore = 0;
+        let message = '';
+        let messageTimer = 0;
+        let messageColor = '#fff';
+
+        // State machine
+        let gameState = 'waiting';
+        let stateTimer = 0;
+
+        // Swipe trail for visual feedback
+        let swipeTrail = [];
+
+        // Net hit animation
+        let netHitAnim = 0;
+
+        // --- Drawing ---
+        function drawCourt() {
+            const w = W(), h = H();
+            const vanishY = h * VANISH_Y_RATIO;
+            const netY = h * NET_Y_RATIO;
+
+            // Sky gradient
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, vanishY);
+            skyGrad.addColorStop(0, '#87CEEB');
+            skyGrad.addColorStop(1, '#b0d4f1');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, w, vanishY);
+
+            // Court surface with perspective
+            const courtGrad = ctx.createLinearGradient(0, vanishY, 0, h);
+            courtGrad.addColorStop(0, '#2d7a4f');
+            courtGrad.addColorStop(0.5, '#358856');
+            courtGrad.addColorStop(1, '#3d9960');
+            ctx.fillStyle = courtGrad;
+            ctx.beginPath();
+            ctx.moveTo(0, vanishY);
+            ctx.lineTo(w, vanishY);
+            ctx.lineTo(w, h);
+            ctx.lineTo(0, h);
+            ctx.fill();
+
+            // Perspective court lines
+            const cx = w / 2;
+            const baseLeft = w * 0.02;
+            const baseRight = w * 0.98;
+            const topLeft = cx - w * 0.15;
+            const topRight = cx + w * 0.15;
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            ctx.lineWidth = 3;
+
+            // Left sideline
+            ctx.beginPath();
+            ctx.moveTo(baseLeft, h);
+            ctx.lineTo(topLeft, vanishY);
+            ctx.stroke();
+
+            // Right sideline
+            ctx.beginPath();
+            ctx.moveTo(baseRight, h);
+            ctx.lineTo(topRight, vanishY);
+            ctx.stroke();
+
+            // Center line
+            ctx.beginPath();
+            ctx.moveTo(cx, h);
+            ctx.lineTo(cx, vanishY);
+            ctx.stroke();
+
+            // Horizontal court lines with perspective
+            const lines = [0.3, 0.5, 0.7, 0.85];
+            for (const ratio of lines) {
+                const y = vanishY + (h - vanishY) * ratio;
+                const t = ratio;
+                const lx = topLeft + (baseLeft - topLeft) * t;
+                const rx = topRight + (baseRight - topRight) * t;
+                ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(lx, y);
+                ctx.lineTo(rx, y);
+                ctx.stroke();
+            }
+
+            // --- Net ---
+            const netTopY = netY - 20;
+            const netBottomY = netY + 8;
+            const netT = (netY - vanishY) / (h - vanishY);
+            const netLeft = topLeft + (baseLeft - topLeft) * netT - 10;
+            const netRight = topRight + (baseRight - topRight) * netT + 10;
+
+            // Net band
+            ctx.fillStyle = '#eee';
+            ctx.fillRect(netLeft, netTopY, netRight - netLeft, 6);
+
+            // Net mesh
+            ctx.strokeStyle = 'rgba(200,200,200,0.6)';
+            ctx.lineWidth = 1;
+            const meshSpacing = 18;
+            for (let x = netLeft; x < netRight; x += meshSpacing) {
+                ctx.beginPath();
+                ctx.moveTo(x, netTopY);
+                ctx.lineTo(x, netBottomY);
+                ctx.stroke();
+            }
+            for (let y = netTopY; y < netBottomY; y += 8) {
+                ctx.beginPath();
+                ctx.moveTo(netLeft, y);
+                ctx.lineTo(netRight, y);
+                ctx.stroke();
+            }
+
+            // Net posts
+            ctx.fillStyle = '#888';
+            ctx.fillRect(netLeft - 4, netTopY - 10, 8, netBottomY - netTopY + 20);
+            ctx.fillRect(netRight - 4, netTopY - 10, 8, netBottomY - netTopY + 20);
+
+            // Net hit flash
+            if (netHitAnim > 0) {
+                ctx.fillStyle = `rgba(255,100,100,${netHitAnim / 30})`;
+                ctx.fillRect(netLeft, netTopY - 5, netRight - netLeft, netBottomY - netTopY + 10);
+            }
+        }
+
+        function drawOpponent() {
+            const w = W(), h = H();
+            const vanishY = h * VANISH_Y_RATIO;
+            const netY = h * NET_Y_RATIO;
+
+            const oppY = vanishY + (netY - vanishY) * 0.55;
+            const oppX = w * opponentX;
+            const scale = 0.8;
+
+            const headR = 16 * scale;
+            const bodyLen = 50 * scale;
+            const armLen = 35 * scale;
+            const legLen = 35 * scale;
+
+            // Head
+            ctx.fillStyle = '#f4c7a1';
+            ctx.beginPath();
+            ctx.arc(oppX, oppY - bodyLen - headR, headR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Shirt / body
+            ctx.fillStyle = '#2255aa';
+            ctx.fillRect(oppX - 14 * scale, oppY - bodyLen, 28 * scale, bodyLen * 0.6);
+            ctx.strokeStyle = '#2255aa';
+            ctx.lineWidth = 5 * scale;
+            ctx.beginPath();
+            ctx.moveTo(oppX, oppY - bodyLen);
+            ctx.lineTo(oppX, oppY);
+            ctx.stroke();
+
+            // Legs
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 4 * scale;
+            ctx.beginPath();
+            ctx.moveTo(oppX, oppY);
+            ctx.lineTo(oppX - 15 * scale, oppY + legLen);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(oppX, oppY);
+            ctx.lineTo(oppX + 15 * scale, oppY + legLen);
+            ctx.stroke();
+
+            // Arms
+            const swingAngle = Math.sin(opponentSwingPhase) * 0.8;
+            ctx.strokeStyle = '#f4c7a1';
+            ctx.lineWidth = 4 * scale;
+
+            // Left arm
+            ctx.beginPath();
+            ctx.moveTo(oppX - 12 * scale, oppY - bodyLen * 0.75);
+            ctx.lineTo(oppX - 12 * scale - armLen * 0.6, oppY - bodyLen * 0.5);
+            ctx.stroke();
+
+            // Right arm (paddle arm)
+            const armBaseX = oppX + 12 * scale;
+            const armBaseY = oppY - bodyLen * 0.75;
+            const armEndX = armBaseX + Math.cos(-0.5 + swingAngle) * armLen;
+            const armEndY = armBaseY + Math.sin(-0.5 + swingAngle) * armLen;
+            ctx.beginPath();
+            ctx.moveTo(armBaseX, armBaseY);
+            ctx.lineTo(armEndX, armEndY);
+            ctx.stroke();
+
+            // Opponent paddle
+            ctx.fillStyle = '#ff4757';
+            ctx.save();
+            ctx.translate(armEndX, armEndY);
+            ctx.rotate(-0.3 + swingAngle * 0.5);
+            ctx.fillRect(-6 * scale, -12 * scale, 12 * scale, 24 * scale);
+            ctx.restore();
+        }
+
+        function drawBall() {
+            if (!ball) return;
+            const w = W(), h = H();
+            const vanishY = h * VANISH_Y_RATIO;
+            const netY = h * NET_Y_RATIO;
+            const paddleY = h * PADDLE_Y_RATIO;
+
+            let bx, by, radius;
+
+            if (ball.phase === 'incoming' || ball.phase === 'strike_zone') {
+                const t = ball.t;
+                const startBX = w * ball.startX;
+                const endBX = w * ball.targetX;
+                bx = startBX + (endBX - startBX) * t;
+
+                const startBY = vanishY + (netY - vanishY) * 0.3;
+                const endBY = paddleY - 30;
+
+                if (t < 0.6) {
+                    const lt = t / 0.6;
+                    by = startBY + (endBY * 0.7 - startBY) * lt;
+                    by -= Math.sin(lt * Math.PI) * h * 0.08;
+                } else {
+                    const lt = (t - 0.6) / 0.4;
+                    const bounceY = endBY * 0.7;
+                    by = bounceY + (endBY - bounceY) * lt;
+                    by -= Math.sin(lt * Math.PI) * h * 0.12;
+                }
+
+                radius = 8 + t * 28;
+
+            } else if (ball.phase === 'returning') {
+                const t = ball.t;
+                const startBX = w * ball.startX;
+                const endBX = w * ball.targetX;
+                bx = startBX + (endBX - startBX) * t;
+
+                const startBY = paddleY - 60;
+                // swipeQuality: 0=too slow(net), 0.5=perfect(drop at feet), 1.0=too fast(high/deep)
+                const q = ball.swipeQuality;
+
+                // Arc height: perfect = low arc just over net; too fast = very high arc
+                const arcHeight = h * (0.05 + q * 0.25);
+
+                // Landing point: perfect = just past net; too fast = deep behind opponent
+                const perfectLandY = vanishY + (netY - vanishY) * 0.65;
+                const deepLandY = vanishY + (netY - vanishY) * 0.15;
+                const endBY = perfectLandY + (deepLandY - perfectLandY) * Math.max(0, (q - 0.5) * 2);
+
+                by = startBY + (endBY - startBY) * t;
+                by -= Math.sin(t * Math.PI) * arcHeight;
+
+                radius = 36 - t * 28;
+
+            } else if (ball.phase === 'net_hit') {
+                const t = ball.t;
+                bx = w * ball.startX;
+                const netMidY = h * NET_Y_RATIO;
+                by = (h * PADDLE_Y_RATIO - 60) + (netMidY - (h * PADDLE_Y_RATIO - 60)) * Math.min(t * 2, 1);
+                // Ball drops after hitting net
+                if (t > 0.5) {
+                    by = netMidY + (t - 0.5) * 2 * h * 0.15;
+                }
+                radius = 36 - t * 20;
+            }
+
+            if (bx === undefined) return;
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(bx, by + radius * 0.8, radius * 0.8, radius * 0.3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ball
+            ctx.fillStyle = '#e8d44d';
+            ctx.beginPath();
+            ctx.arc(bx, by, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.beginPath();
+            ctx.arc(bx - radius * 0.25, by - radius * 0.25, radius * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Outline
+            ctx.strokeStyle = '#c4a830';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(bx, by, radius, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        function drawPaddle() {
+            const w = W(), h = H();
+            const px = w * paddleX;
+            const py = h * PADDLE_Y_RATIO;
+            const pw = w * PADDLE_W;
+            const ph = PADDLE_H_PX * 2;
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(px - pw / 2 + 4, py - ph / 2 + 4, pw, ph);
+
+            // Paddle
+            ctx.fillStyle = '#ff4757';
+            ctx.strokeStyle = '#cc2233';
+            ctx.lineWidth = 3;
+            ctx.fillRect(px - pw / 2, py - ph / 2, pw, ph);
+            ctx.strokeRect(px - pw / 2, py - ph / 2, pw, ph);
+
+            // Grip lines
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 3; i++) {
+                const ly = py - ph / 2 + ph * 0.3 + i * (ph * 0.15);
+                ctx.beginPath();
+                ctx.moveTo(px - pw / 2 + 6, ly);
+                ctx.lineTo(px + pw / 2 - 6, ly);
+                ctx.stroke();
+            }
+        }
+
+        function drawSwipeTrail() {
+            if (swipeTrail.length < 2) return;
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            // Convert screen coords to canvas coords
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            for (let i = 0; i < swipeTrail.length; i++) {
+                const p = swipeTrail[i];
+                const cx = p.x * scaleX;
+                const cy = p.y * scaleY;
+                if (i === 0) ctx.moveTo(cx, cy);
+                else ctx.lineTo(cx, cy);
+            }
+            ctx.stroke();
+        }
+
+        function drawUI() {
+            const w = W(), h = H();
+
+            // Score
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            const scoreBoxW = 200;
+            ctx.beginPath();
+            ctx.roundRect(w / 2 - scoreBoxW / 2, 10, scoreBoxW, 50, 8);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 28px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${playerScore} - ${opponentScore}`, w / 2, 45);
+
+            // Message
+            if (messageTimer > 0) {
+                const alpha = Math.min(1, messageTimer / 30);
+                ctx.fillStyle = messageColor.replace('1)', `${alpha})`);
+                ctx.font = 'bold 44px sans-serif';
+                ctx.fillText(message, w / 2, h * 0.5);
+            }
+
+            // Strike zone hint
+            if (gameState === 'strike_zone') {
+                ctx.save();
+                ctx.fillStyle = 'rgba(255,255,100,0.5)';
+                ctx.font = 'bold 26px sans-serif';
+                ctx.fillText('SWIPE UP to hit!', w / 2, h * 0.82);
+
+                // Swipe arrow hint
+                const arrowX = w / 2;
+                const arrowY = h * 0.88;
+                ctx.strokeStyle = 'rgba(255,255,100,0.4)';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(arrowX, arrowY + 20);
+                ctx.lineTo(arrowX, arrowY - 20);
+                ctx.lineTo(arrowX - 10, arrowY - 10);
+                ctx.moveTo(arrowX, arrowY - 20);
+                ctx.lineTo(arrowX + 10, arrowY - 10);
+                ctx.stroke();
+
+                ctx.font = '18px sans-serif';
+                ctx.fillStyle = 'rgba(200,200,200,0.5)';
+                ctx.fillText('Slow = net | Just right = drop | Fast = high', w / 2, h * 0.96);
+                ctx.restore();
+            }
+
+            // Swipe speed feedback after hit
+            if (ball && ball.phase === 'returning' && ball.t < 0.3) {
+                const q = ball.swipeQuality;
+                let label, color;
+                if (q < 0.25) {
+                    // shouldn't happen since we handle net, but just in case
+                    label = 'Too soft!';
+                    color = 'rgba(255,100,100,0.8)';
+                } else if (q < 0.65) {
+                    label = 'Nice drop!';
+                    color = 'rgba(100,255,150,0.8)';
+                } else if (q < 0.85) {
+                    label = 'Too hard!';
+                    color = 'rgba(255,200,50,0.8)';
+                } else {
+                    label = 'Way too hard!';
+                    color = 'rgba(255,80,80,0.8)';
+                }
+                ctx.fillStyle = color;
+                ctx.font = 'bold 32px sans-serif';
+                ctx.fillText(label, w / 2, h * 0.75);
+            }
+        }
+
+        // --- Game Logic ---
+        function startOpponentHit() {
+            opponentTargetX = 0.3 + Math.random() * 0.4;
+            opponentSwingPhase = 0;
+            gameState = 'opponent_windup';
+            stateTimer = 0;
+        }
+
+        function launchBall() {
+            ball = {
+                t: 0,
+                startX: opponentX,
+                targetX: 0.25 + Math.random() * 0.5,
+                phase: 'incoming',
+                swipeQuality: 0
+            };
+            gameState = 'incoming';
+        }
+
+        function processSwipe(endX, endY) {
+            const elapsed = Math.max(Date.now() - swipeStartTime, 10);
+            const dx = endX - swipeStartX;
+            const dy = endY - swipeStartY; // negative = upward swipe
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            // Must be an upward swipe with minimum distance
+            if (dy > -15 || dist < 20) return; // not a valid upward swipe
+
+            // Speed in pixels per millisecond (using upward component)
+            const upwardSpeed = Math.abs(dy) / elapsed;
+
+            // Map speed to quality:
+            // < 0.3 px/ms = too slow (hits net)
+            // 0.3 - 0.8 = sweet spot (nice drop)
+            // > 0.8 = too fast (goes high/deep)
+            // Normalize to 0-1 where 0.3-0.5 is the sweet zone
+            const SWEET_LOW = 0.4;
+            const SWEET_HIGH = 1.0;
+            const TOO_FAST = 2.0;
+
+            let swipeQuality;
+            if (upwardSpeed < SWEET_LOW) {
+                // Too slow - will hit net
+                swipeQuality = upwardSpeed / SWEET_LOW * 0.25; // 0 to 0.25
+            } else if (upwardSpeed <= SWEET_HIGH) {
+                // Sweet spot - nice drop
+                swipeQuality = 0.3 + ((upwardSpeed - SWEET_LOW) / (SWEET_HIGH - SWEET_LOW)) * 0.3; // 0.3 to 0.6
+            } else {
+                // Too fast - goes high
+                swipeQuality = 0.6 + Math.min(0.4, ((upwardSpeed - SWEET_HIGH) / (TOO_FAST - SWEET_HIGH)) * 0.4); // 0.6 to 1.0
+            }
+
+            lastSwipeSpeed = upwardSpeed;
+
+            // Check if paddle is aligned with ball
+            if (!checkHit()) {
+                message = 'Miss!';
+                messageColor = 'rgba(255,100,100,1)';
+                messageTimer = 50;
+                return;
+            }
+
+            if (swipeQuality < 0.25) {
+                // Ball hits the net
+                ball = {
+                    t: 0,
+                    startX: paddleX,
+                    targetX: paddleX,
+                    phase: 'net_hit',
+                    swipeQuality: swipeQuality
+                };
+                gameState = 'net_hit';
+                stateTimer = 0;
+                netHitAnim = 30;
+                message = 'Net!';
+                messageColor = 'rgba(255,100,100,1)';
+                messageTimer = 60;
+            } else {
+                // Ball returns over net
+                const returnTargetX = 0.3 + Math.random() * 0.4;
+                ball = {
+                    t: 0,
+                    startX: paddleX,
+                    targetX: returnTargetX,
+                    phase: 'returning',
+                    swipeQuality: swipeQuality
+                };
+                gameState = 'returning';
+            }
+            swipeTrail = [];
+        }
+
+        function checkHit() {
+            if (!ball || ball.phase !== 'strike_zone') return false;
+            const ballX = ball.startX + (ball.targetX - ball.startX) * ball.t;
+            const diff = Math.abs(ballX - paddleX);
+            return diff < PADDLE_W * 0.8;
+        }
+
+        function playerPoint() {
+            playerScore++;
+            message = 'Point!';
+            messageColor = 'rgba(100,255,150,1)';
+            messageTimer = 90;
+            gameState = 'point_over';
+            stateTimer = 0;
+            ball = null;
+        }
+
+        function opponentPoint() {
+            opponentScore++;
+            message = 'Opponent point!';
+            messageColor = 'rgba(255,150,100,1)';
+            messageTimer = 90;
+            gameState = 'point_over';
+            stateTimer = 0;
+            ball = null;
+        }
+
+        // --- Update ---
+        function update() {
+            stateTimer++;
+            if (messageTimer > 0) messageTimer--;
+            if (netHitAnim > 0) netHitAnim--;
+
+            opponentX += (opponentTargetX - opponentX) * 0.05;
+
+            if (opponentSwingPhase > 0) {
+                opponentSwingPhase += 0.15;
+                if (opponentSwingPhase > Math.PI) opponentSwingPhase = 0;
+            }
+
+            // Fade old swipe trail points
+            const now = Date.now();
+            swipeTrail = swipeTrail.filter(p => now - p.time < 200);
+
+            switch (gameState) {
+                case 'waiting':
+                    if (stateTimer > 60) startOpponentHit();
+                    break;
+
+                case 'opponent_windup':
+                    if (stateTimer > 40) opponentSwingPhase = 0.01;
+                    if (stateTimer > 55) launchBall();
+                    break;
+
+                case 'incoming':
+                    if (ball) {
+                        ball.t += BALL_SPEED_INCOMING;
+                        if (ball.t >= 0.85) {
+                            ball.phase = 'strike_zone';
+                            gameState = 'strike_zone';
+                            stateTimer = 0;
+                        }
+                    }
+                    break;
+
+                case 'strike_zone':
+                    if (ball) {
+                        ball.t += BALL_SPEED_INCOMING * 0.4;
+                        if (ball.t >= 1.15) {
+                            opponentPoint();
+                        }
+                    }
+                    break;
+
+                case 'returning':
+                    if (ball) {
+                        ball.t += BALL_SPEED_RETURNING;
+                        if (ball.t >= 1) {
+                            const q = ball.swipeQuality;
+                            if (q >= 0.25 && q < 0.65) {
+                                // Nice drop - player wins the point
+                                playerPoint();
+                            } else {
+                                // Too hard - opponent can return (for now, player loses)
+                                opponentPoint();
+                                message = 'Too deep!';
+                                messageColor = 'rgba(255,150,100,1)';
+                            }
+                        }
+                    }
+                    break;
+
+                case 'net_hit':
+                    if (ball) {
+                        ball.t += 0.015;
+                        if (ball.t >= 1) {
+                            opponentPoint();
+                        }
+                    }
+                    break;
+
+                case 'point_over':
+                    if (stateTimer > 100) {
+                        gameState = 'waiting';
+                        stateTimer = 0;
+                        opponentTargetX = 0.5;
+                    }
+                    break;
+            }
+        }
+
+        // --- Render ---
+        function render() {
+            ctx.clearRect(0, 0, W(), H());
+            drawCourt();
+            drawOpponent();
+            drawBall();
+            drawPaddle();
+            drawSwipeTrail();
+            drawUI();
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Touch Controls ---
+        let lastTouchX = 0;
+        let touchId = null;
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchId = touch.identifier;
+            lastTouchX = touch.clientX;
+
+            if (gameState === 'strike_zone') {
+                // Start tracking swipe for hitting
+                swipeStartX = touch.clientX;
+                swipeStartY = touch.clientY;
+                swipeStartTime = Date.now();
+                isSwiping = true;
+                swipeTrail = [{ x: touch.clientX, y: touch.clientY, time: Date.now() }];
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = Array.from(e.touches).find(t => t.identifier === touchId);
+            if (!touch) return;
+
+            if (gameState !== 'strike_zone' || !isSwiping) {
+                // Move paddle when not in strike zone
+                const dx = touch.clientX - lastTouchX;
+                paddleX = Math.max(0.1, Math.min(0.9, paddleX + dx / wrapper.getBoundingClientRect().width));
+            } else {
+                // Record swipe trail
+                swipeTrail.push({ x: touch.clientX, y: touch.clientY, time: Date.now() });
+            }
+            lastTouchX = touch.clientX;
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isSwiping && gameState === 'strike_zone') {
+                const touch = e.changedTouches[0];
+                processSwipe(touch.clientX, touch.clientY);
+                isSwiping = false;
+            }
+            touchId = null;
+        }, { passive: false });
+
+        // --- Mouse Controls (desktop testing) ---
+        let mouseDown = false;
+
+        canvas.addEventListener('mousedown', (e) => {
+            mouseDown = true;
+            lastTouchX = e.clientX;
+
+            if (gameState === 'strike_zone') {
+                swipeStartX = e.clientX;
+                swipeStartY = e.clientY;
+                swipeStartTime = Date.now();
+                isSwiping = true;
+                swipeTrail = [{ x: e.clientX, y: e.clientY, time: Date.now() }];
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!mouseDown) return;
+
+            if (gameState !== 'strike_zone' || !isSwiping) {
+                const dx = e.clientX - lastTouchX;
+                paddleX = Math.max(0.1, Math.min(0.9, paddleX + dx / wrapper.getBoundingClientRect().width));
+            } else {
+                swipeTrail.push({ x: e.clientX, y: e.clientY, time: Date.now() });
+            }
+            lastTouchX = e.clientX;
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (isSwiping && gameState === 'strike_zone') {
+                processSwipe(e.clientX, e.clientY);
+                isSwiping = false;
+            }
+            mouseDown = false;
+        });
+
+        // Prevent scrolling
+        document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+        // Start
+        gameState = 'waiting';
+        stateTimer = 0;
+        gameLoop();
     </script>
 </body>
 </html>
