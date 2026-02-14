@@ -92,8 +92,8 @@
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
 
-    <!-- PlayCanvas Engine (pinned v2.6.0) -->
-    <script src="https://code.playcanvas.com/playcanvas-2.6.0.min.js"></script>
+    <!-- PlayCanvas Engine (v2.0 - matches ammo.751ec5f build) -->
+    <script src="https://code.playcanvas.com/playcanvas-stable.min.js"></script>
     <!-- Ammo.js Physics -->
     <script src="https://code.playcanvas.com/ammo.751ec5f.js"></script>
 </head>
@@ -147,6 +147,13 @@
                 try {
                 console.log('[PocketPickleball] initGame called, Ammo type:', typeof Ammo);
 
+                // Shim missing methods for older Ammo.js builds
+                if (Ammo.btRigidBody && Ammo.btRigidBody.prototype && !Ammo.btRigidBody.prototype.setRollingFriction) {
+                    Ammo.btRigidBody.prototype.setRollingFriction = function () {};
+                    Ammo.btRigidBody.prototype.setSpinningFriction = function () {};
+                    console.log('[PocketPickleball] Shimmed missing Ammo.js friction methods');
+                }
+
                 // --- Constants ---
                 const COURT_W = 6.1;
                 const COURT_L = 13.41;
@@ -161,6 +168,9 @@
                     elementInput: new pc.ElementInput(canvas),
                     keyboard: new pc.Keyboard(window)
                 });
+
+                // Start app first - initializes physics (Ammo.js) system
+                app.start();
 
                 // Set fill mode to fill the window
                 app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
@@ -396,14 +406,29 @@
                 const ray = new pc.Ray();
                 const hitPoint = new pc.Vec3();
 
-                // Hit Zone Mechanics
-                // Zone: X[-3.0, 3.0], Y[-0.5, 4.5], Z[4.5, 8.5]
-                // Widen X to 3.0 for very generous side reach
-                const canHit = (pos) => {
-                    // PlayCanvas Vec3 access
-                    return pos.z > 4.5 && pos.z < 8.5 &&
-                        Math.abs(pos.x) < 3.0 &&
-                        pos.y > -0.5 && pos.y < 4.5;
+                // Hit Zone: camera-relative frustum (0.5m to 2.5m in front)
+                const HIT_NEAR = 0.5;
+                const HIT_FAR = 2.5;
+                const HIT_SPREAD = 0.6; // lateral spread factor (widens with distance)
+                const _ballLocal = new pc.Vec3();
+
+                const canHit = (ballWorldPos) => {
+                    // Transform ball position into camera's local space
+                    const camInv = camera.getWorldTransform().clone().invert();
+                    _ballLocal.copy(ballWorldPos);
+                    camInv.transformPoint(_ballLocal, _ballLocal);
+
+                    // In camera local space: -Z is forward, X is right, Y is up
+                    const depth = -_ballLocal.z;
+
+                    if (depth < HIT_NEAR || depth > HIT_FAR) return false;
+
+                    // Frustum widens with depth
+                    const halfWidth = depth * HIT_SPREAD;
+                    const halfHeight = depth * HIT_SPREAD;
+
+                    return Math.abs(_ballLocal.x) < halfWidth &&
+                           Math.abs(_ballLocal.y) < halfHeight;
                 };
 
                 let swipeStartPos = new pc.Vec2();
@@ -547,9 +572,7 @@
                     }
                 });
 
-                // Start app AFTER all entities and listeners are set up
-                app.start();
-                console.log('[PocketPickleball] App started successfully');
+                console.log('[PocketPickleball] Game setup complete');
 
                 } catch (err) {
                     console.error('[PocketPickleball] Init error:', err);
