@@ -843,41 +843,40 @@
 
                                 // Ball crossed the net (z < 0)
                                 if (bPos.z < -0.3) {
-                                    // 1. Capture height as it reaches the opponent's plane (z = -2.13)
-                                    if (bPos.z <= KITCHEN_Z && heightAtCrossing === -1) {
+                                    // 1. Capture height as it reaches the opponent's strike zone (z = -2.0)
+                                    if (bPos.z <= -2.0 && heightAtCrossing === -1) {
                                         heightAtCrossing = bPos.y;
-
-                                        // HIGH BALL RULE: Above waist height (mid-torso ~1.15m)
-                                        if (heightAtCrossing >= 1.15) {
-                                            highBalls++;
-                                            updateScoreUI();
-                                            showMsg('HIGH BALL!', 'high');
-
-                                            // Intercept and smash
-                                            const currentPos = opponent.getPosition();
-                                            opponent.setPosition(bPos.x + 0.5, currentPos.y, currentPos.z);
-                                            opponentSmash();
-                                            playerHasHit = false;
-                                            return;
-                                        }
                                     }
 
-                                    // 2. Check for bounce (GOOD or FAIR DROP)
+                                    // 2. ABSOLUTE HIGH BALL RULE: If un-bounced and above Waist (1.2m) in strike zone
+                                    if (!ballHasBounced && bPos.z <= -2.1 && bPos.y >= 1.2) {
+                                        highBalls++;
+                                        updateScoreUI();
+                                        showMsg('HIGH BALL!', 'high');
+
+                                        // SNAP opponent to ball for guaranteed smash
+                                        const currentPos = opponent.getPosition();
+                                        opponent.setPosition(bPos.x + 0.5, 0, currentPos.z);
+
+                                        opponentSmash();
+                                        playerHasHit = false;
+                                        return;
+                                    }
+
+                                    // 3. Check for bounce (Categorize Good vs Fair based on crossing height)
                                     const hitGround = (bPos.y < 0.25 && bVel.y < 0);
                                     if ((hitGround || bPos.y < 0.1) && !ballHasBounced) {
                                         ballHasBounced = true;
 
-                                        // Must be inside the court baseline
+                                        // If it hit the ground behind the opponent un-smashed, it was too low to be a High Ball
+                                        // but we still check if it's in or out
                                         if (bPos.z > -COURT_L / 2) {
-                                            // Determine shot type by crossing height
-                                            // (If it bounced before reaching the opponent plane, use current height)
                                             const h = (heightAtCrossing === -1) ? bPos.y : heightAtCrossing;
 
-                                            // Rule: < 0.6m is GOOD, else FAIR (since we already handled HIGH above)
-                                            if (h < 0.6) {
+                                            if (h < 0.5) { // Below Knee (0.5m)
                                                 goodDrops++;
                                                 showMsg('GOOD DROP!', 'good');
-                                            } else {
+                                            } else { // Between Knee and Waist (0.5m - 1.2m)
                                                 fairDrops++;
                                                 showMsg('FAIR DROP!', 'fair');
                                             }
@@ -885,7 +884,7 @@
                                             endRound();
                                             return;
                                         } else {
-                                            // Out of bounds back
+                                            // Ball went un-bounced past baseline (Too Deep / Long)
                                             highBalls++;
                                             updateScoreUI();
                                             showMsg('TOO DEEP!', 'high');
