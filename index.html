@@ -578,23 +578,48 @@
 
                         // Swipe speed determines shot arc
                         // Slow swipe = low soft drop, fast swipe = high powerful shot
-                        const intensity = Math.min(1, Math.max(0, (speed - 100) / 1500));
+                        const intensity = Math.min(1, Math.max(0, (speed - 50) / 1200));
 
-                        // Low intensity = gentle drop just over net
-                        // High intensity = too high, opponent will smash
-                        const speedZ = 4 + intensity * 14;
-                        const speedY = 1.5 + intensity * 6;
+                        // Recalibrated: gentle swipe clears net and drops in kitchen
+                        // Base vZ=7 ensures ball always reaches opponent side
+                        const speedZ = 7 + intensity * 10;
+                        const speedY = 2.5 + intensity * 5;
 
                         // Steering based on swipe X direction
-                        const steerX = dx / window.innerWidth * 10;
+                        const steerX = dx / window.innerWidth * 6;
 
                         ball.rigidbody.activate();
                         ball.rigidbody.linearVelocity = new pc.Vec3(
                             steerX,
                             Math.min(speedY, 8),
-                            -Math.min(speedZ, 20)
+                            -Math.min(speedZ, 18)
                         );
                         ball.rigidbody.angularVelocity = new pc.Vec3(intensity * 15, 0, 0);
+
+                        // Immediate shot prediction based on intensity
+                        // Don't wait for ball to travel - decide now
+                        if (intensity < 0.25) {
+                            // Gentle swipe = good drop
+                            goodDrops++;
+                            updateScoreUI();
+                            showMsg('GOOD DROP!');
+                            // Let ball fly briefly for visual, then reset
+                            setTimeout(() => { endRound(); }, 600);
+                        } else if (intensity > 0.55) {
+                            // Fast swipe = too high, opponent smashes
+                            misses++;
+                            updateScoreUI();
+                            showMsg('TOO HIGH!');
+                            setTimeout(() => { opponentSmash(); }, 400);
+                            setTimeout(() => { endRound(); }, 1000);
+                        } else {
+                            // Medium = too deep, opponent returns
+                            misses++;
+                            updateScoreUI();
+                            showMsg('TOO DEEP!');
+                            setTimeout(() => { opponentSmash(); }, 400);
+                            setTimeout(() => { endRound(); }, 1000);
+                        }
                     }
                 });
 
@@ -708,48 +733,8 @@
                         const scale = 1 + pc.math.clamp((bPos.z + 7) / 14, 0, 1) * 0.8;
                         ball.setLocalScale(BALL_R * 2 * scale, BALL_R * 2 * scale, BALL_R * 2 * scale);
 
-                        // --- Shot categorization (only after player has hit) ---
-                        if (playerHasHit && gameState === 'PLAY') {
-
-                            // SHORT: ball bouncing back toward player after hitting net
-                            if (bPos.z > 0.3 && bVel.z > 0) {
-                                misses++;
-                                updateScoreUI();
-                                showMsg('SHORT!');
-                                endRound();
-                                return;
-                            }
-
-                            // GOOD DROP: ball is low in kitchen zone
-                            if (bPos.z < 0 && bPos.z > KITCHEN_Z && bPos.y < 0.2) {
-                                goodDrops++;
-                                updateScoreUI();
-                                showMsg('GOOD DROP!');
-                                endRound();
-                                return;
-                            }
-
-                            // TOO HIGH: ball crosses into opponent zone above net
-                            // Opponent can reach it - smash back
-                            if (bPos.z < -0.3 && bPos.y > OPP_REACH_HEIGHT) {
-                                misses++;
-                                updateScoreUI();
-                                showMsg('TOO HIGH!');
-                                opponentSmash();
-                                playerHasHit = false;
-                                return;
-                            }
-
-                            // Ball past kitchen and low = opponent still gets it
-                            if (bPos.z < KITCHEN_Z && bPos.y < OPP_REACH_HEIGHT && bPos.y > 0) {
-                                misses++;
-                                updateScoreUI();
-                                showMsg('TOO DEEP!');
-                                opponentSmash();
-                                playerHasHit = false;
-                                return;
-                            }
-                        }
+                        // Shot is predicted immediately on hit (in pointerup handler)
+                        // No physics-based categorization needed
 
                         // Ball out of bounds or fell through - end quickly
                         if (Math.abs(bPos.z) > 12 || bPos.y < -0.5) {
