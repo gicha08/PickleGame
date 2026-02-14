@@ -57,11 +57,11 @@
         const NET_Y_RATIO = 0.38;
         const VANISH_Y_RATIO = 0.18;
 
-        // Paddle
-        let paddleX = 0.5;
-        const PADDLE_W = 0.18;
-        const PADDLE_H_PX = 30;
-        const PADDLE_Y_RATIO = 0.85;
+        // Paddle — tracks finger position directly in canvas coords
+        let paddleCanvasX = 0; // actual canvas X
+        let paddleCanvasY = 0; // actual canvas Y
+        const PADDLE_PW = 70; // paddle width in canvas px
+        const PADDLE_PH = 60; // paddle height in canvas px
         let paddleForward = 0; // 0-1, how far paddle has lunged forward during swing
         let paddleVisible = false; // only show when finger is on screen
 
@@ -567,47 +567,67 @@
             ctx.stroke();
         }
 
-        // Returns the paddle's current bounding box in canvas coords (for hit detection)
+        // Convert screen (clientX, clientY) to canvas coords
+        function screenToCanvas(sx, sy) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: (sx - rect.left) / rect.width * canvas.width,
+                y: (sy - rect.top) / rect.height * canvas.height
+            };
+        }
+
+        // Returns the paddle's current bounding box in canvas coords
         function getPaddleRect() {
-            const w = W(), h = H();
-            const px = w * paddleX;
-            const forwardOffset = paddleForward * h * 0.08;
-            const py = h * PADDLE_Y_RATIO - forwardOffset;
-            const pw = w * PADDLE_W;
-            const ph = PADDLE_H_PX * 2;
+            const forwardOffset = paddleForward * H() * 0.06;
+            const px = paddleCanvasX;
+            const py = paddleCanvasY - forwardOffset;
             const scale = 1 + paddleForward * 0.15;
-            const spw = pw * scale;
-            const sph = ph * scale;
-            return { x: px - spw / 2, y: py - sph / 2, w: spw, h: sph, cx: px, cy: py };
+            const pw = PADDLE_PW * scale;
+            const ph = PADDLE_PH * scale;
+            return { x: px - pw / 2, y: py - ph / 2, w: pw, h: ph, cx: px, cy: py };
         }
 
         function drawPaddle() {
-            if (!paddleVisible && paddleForward <= 0) return; // hidden when finger not on screen
+            if (!paddleVisible && paddleForward <= 0) return;
 
             const r = getPaddleRect();
-            const alpha = paddleVisible ? 1 : Math.max(0, paddleForward * 2); // fade out after release
+            const alpha = paddleVisible ? 1 : Math.max(0, paddleForward * 2);
 
             ctx.globalAlpha = alpha;
 
             // Shadow
-            ctx.fillStyle = 'rgba(0,0,0,0.3)';
-            ctx.fillRect(r.x + 4, r.y + 4, r.w, r.h);
+            ctx.fillStyle = 'rgba(0,0,0,0.25)';
+            ctx.beginPath();
+            ctx.roundRect(r.x + 4, r.y + 4, r.w, r.h, 6);
+            ctx.fill();
 
-            // Paddle
-            ctx.fillStyle = '#ff4757';
-            ctx.strokeStyle = '#cc2233';
-            ctx.lineWidth = 3;
-            ctx.fillRect(r.x, r.y, r.w, r.h);
-            ctx.strokeRect(r.x, r.y, r.w, r.h);
+            // Paddle face
+            const paddleGrad = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+            paddleGrad.addColorStop(0, '#ff5a5a');
+            paddleGrad.addColorStop(1, '#d42f3f');
+            ctx.fillStyle = paddleGrad;
+            ctx.strokeStyle = '#aa1122';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.roundRect(r.x, r.y, r.w, r.h, 6);
+            ctx.fill();
+            ctx.stroke();
 
-            // Grip lines
-            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            // Edge guard
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6, 4);
+            ctx.stroke();
+
+            // Grip lines at bottom
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)';
             ctx.lineWidth = 2;
             for (let i = 0; i < 3; i++) {
-                const ly = r.y + r.h * 0.3 + i * (r.h * 0.15);
+                const ly = r.y + r.h * 0.55 + i * (r.h * 0.12);
                 ctx.beginPath();
-                ctx.moveTo(r.x + 6, ly);
-                ctx.lineTo(r.x + r.w - 6, ly);
+                ctx.moveTo(r.x + 8, ly);
+                ctx.lineTo(r.x + r.w - 8, ly);
                 ctx.stroke();
             }
 
@@ -768,12 +788,15 @@
                 return;
             }
 
+            // Convert paddle canvas position to normalized 0-1
+            const hitX = paddleCanvasX / W();
+
             if (swipeQuality < 0.25) {
                 // Ball hits the net
                 ball = {
                     t: 0,
-                    startX: paddleX,
-                    targetX: paddleX,
+                    startX: hitX,
+                    targetX: hitX,
                     phase: 'net_hit',
                     swipeQuality: swipeQuality
                 };
@@ -788,7 +811,7 @@
                 const returnTargetX = 0.3 + Math.random() * 0.4;
                 ball = {
                     t: 0,
-                    startX: paddleX,
+                    startX: hitX,
                     targetX: returnTargetX,
                     phase: 'returning',
                     swipeQuality: swipeQuality
@@ -964,19 +987,18 @@
         }
 
         // --- Touch Controls ---
-        let lastTouchX = 0;
         let touchId = null;
 
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             const touch = e.touches[0];
             touchId = touch.identifier;
-            lastTouchX = touch.clientX;
             paddleVisible = true;
 
-            // Snap paddle to where finger touches
-            const rect = wrapper.getBoundingClientRect();
-            paddleX = Math.max(0.1, Math.min(0.9, (touch.clientX - rect.left) / rect.width));
+            // Place paddle exactly at finger position
+            const cp = screenToCanvas(touch.clientX, touch.clientY);
+            paddleCanvasX = cp.x;
+            paddleCanvasY = cp.y;
 
             if (gameState === 'strike_zone') {
                 swipeStartX = touch.clientX;
@@ -992,20 +1014,16 @@
             const touch = Array.from(e.touches).find(t => t.identifier === touchId);
             if (!touch) return;
 
+            // Always update paddle to follow finger
+            const cp = screenToCanvas(touch.clientX, touch.clientY);
+            paddleCanvasX = cp.x;
+            paddleCanvasY = cp.y;
+
             if (isSwiping && gameState === 'strike_zone') {
-                // Record swipe trail and move paddle forward based on upward movement
                 swipeTrail.push({ x: touch.clientX, y: touch.clientY, time: Date.now() });
                 const upward = Math.max(0, swipeStartY - touch.clientY);
                 paddleForward = Math.min(1, upward / 120);
-                // Also track horizontal movement during swipe for paddle position
-                const rect = wrapper.getBoundingClientRect();
-                paddleX = Math.max(0.1, Math.min(0.9, (touch.clientX - rect.left) / rect.width));
-            } else {
-                // Move paddle by dragging
-                const dx = touch.clientX - lastTouchX;
-                paddleX = Math.max(0.1, Math.min(0.9, paddleX + dx / wrapper.getBoundingClientRect().width));
             }
-            lastTouchX = touch.clientX;
         }, { passive: false });
 
         document.addEventListener('touchend', (e) => {
@@ -1032,12 +1050,11 @@
 
         canvas.addEventListener('mousedown', (e) => {
             mouseDown = true;
-            lastTouchX = e.clientX;
             paddleVisible = true;
 
-            // Snap paddle to click position
-            const rect = wrapper.getBoundingClientRect();
-            paddleX = Math.max(0.1, Math.min(0.9, (e.clientX - rect.left) / rect.width));
+            const cp = screenToCanvas(e.clientX, e.clientY);
+            paddleCanvasX = cp.x;
+            paddleCanvasY = cp.y;
 
             if (gameState === 'strike_zone') {
                 swipeStartX = e.clientX;
@@ -1051,17 +1068,15 @@
         canvas.addEventListener('mousemove', (e) => {
             if (!mouseDown) return;
 
+            const cp = screenToCanvas(e.clientX, e.clientY);
+            paddleCanvasX = cp.x;
+            paddleCanvasY = cp.y;
+
             if (isSwiping && gameState === 'strike_zone') {
                 swipeTrail.push({ x: e.clientX, y: e.clientY, time: Date.now() });
                 const upward = Math.max(0, swipeStartY - e.clientY);
                 paddleForward = Math.min(1, upward / 120);
-                const rect = wrapper.getBoundingClientRect();
-                paddleX = Math.max(0.1, Math.min(0.9, (e.clientX - rect.left) / rect.width));
-            } else {
-                const dx = e.clientX - lastTouchX;
-                paddleX = Math.max(0.1, Math.min(0.9, paddleX + dx / wrapper.getBoundingClientRect().width));
             }
-            lastTouchX = e.clientX;
         });
 
         document.addEventListener('mouseup', (e) => {
