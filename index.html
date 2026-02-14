@@ -522,6 +522,7 @@
                     let fairDrops = 0;
                     let shortBalls = 0;
                     let highBalls = 0;
+                    let ballHasBounced = false; // NEW: track if ball bounced this round
 
                     let lastMouseY = 0;
                     let lastPaddlePos = new pc.Vec3();
@@ -553,6 +554,7 @@
                         ball.rigidbody.angularVelocity = pc.Vec3.ZERO;
                         ball.enabled = false;
                         playerHasHit = false;
+                        ballHasBounced = false; // Reset bounce flag
                     };
 
                     const serve = () => {
@@ -808,15 +810,13 @@
 
                                 // Ball crossed the net (z < 0)
                                 if (bPos.z < -0.3) {
-                                    // 1. Check for ball bounce first
-                                    // Bouncing in kitchen results in either a "Good Drop" or a "Fair Drop"
-                                    const hasBounced = (bPos.y < 0.18 && bVel.y < 0);
+                                    // 1. Check for ball bounce
+                                    const hitGround = (bPos.y < 0.2 && bVel.y < 0);
 
-                                    if (hasBounced) {
+                                    if (hitGround && !ballHasBounced) {
+                                        ballHasBounced = true;
                                         if (bPos.z > KITCHEN_Z) {
-                                            // DISTINGUISH Good vs Fair
-                                            // Good: Bounced early (opponent didn't even try to reach)
-                                            // Fair: Bounced late in striking zone (opponent tried to smash but failed)
+                                            // Bounced in kitchen!
                                             if (bPos.z > -1.8) {
                                                 goodDrops++;
                                                 showMsg('GOOD DROP!');
@@ -828,7 +828,7 @@
                                             endRound();
                                             return;
                                         } else {
-                                            // Bounced deep - counts toward High Ball (for simplicity of the stats requested)
+                                            // Bounced deep - counts as a miss/high ball for the player
                                             highBalls++;
                                             updateScoreUI();
                                             showMsg('TOO DEEP!');
@@ -837,24 +837,34 @@
                                         }
                                     }
 
-                                    // 2. Check for interception by the opponent (The "Smash" condition)
-                                    // If it reaches the opponent un-bounced and is "High", it's a High Ball fail
-                                    if (bPos.z < -1.8) {
-                                        const isTooHigh = bPos.y > NET_H + 0.6;
-                                        const isTooDeep = bPos.z < KITCHEN_Z - 0.3;
+                                    // 2. Check for interception (SMASH)
+                                    // ONLY smash if it hasn't bounced yet and is in the strike zone
+                                    if (!ballHasBounced && bPos.z < -2.0) {
+                                        // Redefined High Ball: Must be significantly higher than the net
+                                        // and must be either rising or very high un-bounced
+                                        const isTooHigh = bPos.y > NET_H + 0.8; // Raised from 0.6
+                                        const isTooDeep = bPos.z < KITCHEN_Z - 0.4;
+                                        const isRising = bVel.y > 0;
 
-                                        if (isTooHigh || isTooDeep) {
-                                            highBalls++;
-                                            updateScoreUI();
-                                            showMsg(isTooHigh ? 'HIGH BALL!' : 'TOO DEEP!');
+                                        // A ball is a "High Ball" if it's un-bounced and:
+                                        // - It's above head height
+                                        // - OR it's deep and high enough to be smashed
+                                        if (isTooHigh || (isTooDeep && bPos.y > NET_H + 0.5)) {
+                                            // Don't smash if it's a drop (descending into kitchen)
+                                            if (bVel.y < -1 && bPos.z > -2.3) {
+                                                // Let it fall!
+                                            } else {
+                                                highBalls++;
+                                                updateScoreUI();
+                                                showMsg(isTooHigh ? 'HIGH BALL!' : 'TOO DEEP!');
 
-                                            // Guaranteed interception: Snap opponent to the ball
-                                            const currentPos = opponent.getPosition();
-                                            opponent.setPosition(bPos.x + 0.5, currentPos.y, currentPos.z);
+                                                const currentPos = opponent.getPosition();
+                                                opponent.setPosition(bPos.x + 0.5, currentPos.y, currentPos.z);
 
-                                            opponentSmash();
-                                            playerHasHit = false;
-                                            return;
+                                                opponentSmash();
+                                                playerHasHit = false;
+                                                return;
+                                            }
                                         }
                                     }
                                 }
