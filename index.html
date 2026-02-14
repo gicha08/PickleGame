@@ -145,622 +145,623 @@
 
             function initGame() {
                 try {
-                console.log('[PocketPickleball] initGame called, Ammo type:', typeof Ammo);
-
-                // Shim missing methods for older Ammo.js builds
-                if (Ammo.btRigidBody && Ammo.btRigidBody.prototype && !Ammo.btRigidBody.prototype.setRollingFriction) {
-                    Ammo.btRigidBody.prototype.setRollingFriction = function () {};
-                    Ammo.btRigidBody.prototype.setSpinningFriction = function () {};
-                    console.log('[PocketPickleball] Shimmed missing Ammo.js friction methods');
-                }
-
-                // --- Constants ---
-                const COURT_W = 6.1;
-                const COURT_L = 13.41;
-                const NET_H = 0.914;
-                const BALL_R = 0.07;
-
-                // --- Create Application ---
-                const canvas = document.getElementById('application');
-                const app = new pc.Application(canvas, {
-                    mouse: new pc.Mouse(canvas),
-                    touch: new pc.TouchDevice(canvas),
-                    elementInput: new pc.ElementInput(canvas),
-                    keyboard: new pc.Keyboard(window)
-                });
-
-                // Start app first - initializes physics (Ammo.js) system
-                app.start();
-
-                // Set fill mode to fill the window
-                app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
-                app.setCanvasResolution(pc.RESOLUTION_AUTO);
-
-                // Ensure canvas resizes when window changes
-                window.addEventListener('resize', () => app.resizeCanvas());
-
-                // --- Setup Scene ---
-                // Add Light
-                const light = new pc.Entity('DirectionalLight');
-                light.addComponent('light', {
-                    type: 'directional',
-                    color: new pc.Color(1, 1, 1),
-                    castShadows: true,
-                    intensity: 1.2,
-                    shadowBias: 0.2,
-                    normalOffsetBias: 0.05,
-                    shadowDistance: 20
-                });
-                light.setLocalEulerAngles(45, 30, 0);
-                app.root.addChild(light);
-
-                const ambient = new pc.Entity('AmbientLight');
-                ambient.addComponent('light', {
-                    type: 'point',
-                    color: new pc.Color(0.8, 0.8, 1),
-                    intensity: 0.5,
-                    range: 100
-                });
-                ambient.setPosition(0, 10, 0);
-                app.root.addChild(ambient);
-
-                // Add Camera
-                const camera = new pc.Entity('MainCamera');
-                camera.addComponent('camera', {
-                    clearColor: new pc.Color(0.1, 0.11, 0.17), // Dark blue-ish bg
-                    farClip: 100,
-                    fov: 60
-                });
-                camera.setPosition(0, 2.5, 9);
-                camera.lookAt(0, 0.8, 0);
-                app.root.addChild(camera);
-
-                // --- Materials ---
-                const createMaterial = (color) => {
-                    const material = new pc.StandardMaterial();
-                    material.diffuse = color;
-                    material.update();
-                    return material;
-                };
-                const matCourt = createMaterial(new pc.Color(0.14, 0.38, 0.54)); // 0x24628a
-                const matLine = createMaterial(new pc.Color(1, 1, 1));
-                const matNet = createMaterial(new pc.Color(1, 1, 1));
-                matNet.rollOffFactor = 0; // Simple wireframe-ish look
-                matNet.opacity = 0.3;
-                matNet.blendType = pc.BLEND_NORMAL;
-                matNet.update();
-
-                const matBall = createMaterial(new pc.Color(0.8, 1.0, 0)); // #ccff00
-                matBall.emissive = new pc.Color(0.2, 0.25, 0);
-                matBall.update();
-
-                const matPaddle = createMaterial(new pc.Color(0.9, 0.22, 0.27)); // #e63946
-                const matDark = createMaterial(new pc.Color(0.1, 0.1, 0.1));
-
-                // --- Environment ---
-
-                // Floor (Visual only, below court)
-                const floor = new pc.Entity('Floor');
-                floor.addComponent('render', { type: 'cylinder' });
-                floor.setLocalScale(40, 0.1, 40);
-                floor.setLocalPosition(0, -0.15, 0);
-                floor.render.material = matDark;
-                app.root.addChild(floor);
-
-                // Court Base (Physics + Visual)
-                const court = new pc.Entity('Court');
-                court.addComponent('render', { type: 'plane' });
-                court.setLocalScale(COURT_W, 1, COURT_L);
-                court.setLocalPosition(0, 0, 0);
-                court.render.material = matCourt;
-                // Add collision/rigidbody
-                court.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2, 0.1, COURT_L / 2) });
-                court.addComponent('rigidbody', { type: 'static', friction: 0.1, restitution: 0.75 });
-                // Note: Plane visual is flat, but collision box needs depth. We offset pos slightly
-                // PlayCanvas plane faces Y up.
-                app.root.addChild(court);
-
-                // Court Friction Fix (Since PC doesn't have fine-grained material pairs easily accessible in JS API without deep dive, we rely on body properties)
-
-                // Lines
-                const addLine = (w, l, x, z) => {
-                    const line = new pc.Entity();
-                    line.addComponent('render', { type: 'plane' });
-                    line.setLocalScale(w, 1, l);
-                    line.setLocalPosition(x, 0.01, z); // Raised
-                    line.render.material = matLine;
-                    app.root.addChild(line);
-                };
-                addLine(COURT_W, 0.05, 0, COURT_L / 2);
-                addLine(COURT_W, 0.05, 0, -COURT_L / 2);
-                addLine(0.05, COURT_L, COURT_W / 2, 0);
-                addLine(0.05, COURT_L, -COURT_W / 2, 0);
-                addLine(COURT_W, 0.05, 0, 2.13);
-                addLine(COURT_W, 0.05, 0, -2.13);
-                addLine(0.05, COURT_L - 4.26, 0, 0);
-
-                // Net
-                const net = new pc.Entity('Net');
-                const netVis = new pc.Entity('NetVisual');
-                netVis.addComponent('render', { type: 'box' });
-                netVis.setLocalScale(COURT_W + 0.4, NET_H, 0.02);
-                netVis.setLocalPosition(0, NET_H / 2, 0);
-                netVis.render.material = matNet;
-
-                const tape = new pc.Entity('NetTape');
-                tape.addComponent('render', { type: 'box' });
-                tape.setLocalScale(COURT_W + 0.4, 0.05, 0.05);
-                tape.setLocalPosition(0, NET_H, 0);
-                tape.render.material = matLine;
-
-                const postL = new pc.Entity('PostL');
-                postL.addComponent('render', { type: 'cylinder' });
-                postL.setLocalScale(0.08, NET_H + 0.1, 0.08);
-                postL.setLocalPosition(-(COURT_W / 2 + 0.2), NET_H / 2, 0);
-                postL.render.material = matDark;
-
-                const postR = new pc.Entity('PostR');
-                postR.addComponent('render', { type: 'cylinder' });
-                postR.setLocalScale(0.08, NET_H + 0.1, 0.08);
-                postR.setLocalPosition(COURT_W / 2 + 0.2, NET_H / 2, 0);
-                postR.render.material = matDark;
-
-                net.addChild(netVis); net.addChild(tape); net.addChild(postL); net.addChild(postR);
-                net.setLocalPosition(0, 0, 0);
-                app.root.addChild(net);
-
-                // Net collider - separate entity so collision center matches visual center
-                const netCol = new pc.Entity('NetCollider');
-                netCol.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2 + 0.2, NET_H / 2, 0.05) });
-                netCol.addComponent('rigidbody', { type: 'static' });
-                netCol.setLocalPosition(0, NET_H / 2, 0);
-                app.root.addChild(netCol);
-
-                // --- Opponent ---
-                const matSkin = createMaterial(new pc.Color(0.85, 0.65, 0.5));
-                const matShirt = createMaterial(new pc.Color(0.2, 0.4, 0.8));
-                const matShorts = createMaterial(new pc.Color(0.15, 0.15, 0.15));
-                const matShoe = createMaterial(new pc.Color(1, 1, 1));
-
-                const opponent = new pc.Entity('Opponent');
-                // Kitchen line is at z = -2.13
-                opponent.setLocalPosition(0, 0, -2.13);
-
-                // Torso
-                const torso = new pc.Entity('Torso');
-                torso.addComponent('render', { type: 'box' });
-                torso.setLocalScale(0.4, 0.5, 0.25);
-                torso.setLocalPosition(0, 1.2, 0);
-                torso.render.material = matShirt;
-                opponent.addChild(torso);
-
-                // Head
-                const head = new pc.Entity('Head');
-                head.addComponent('render', { type: 'sphere' });
-                head.setLocalScale(0.22, 0.22, 0.22);
-                head.setLocalPosition(0, 1.6, 0);
-                head.render.material = matSkin;
-                opponent.addChild(head);
-
-                // Hat/visor
-                const hat = new pc.Entity('Hat');
-                hat.addComponent('render', { type: 'cylinder' });
-                hat.setLocalScale(0.26, 0.04, 0.26);
-                hat.setLocalPosition(0, 1.72, 0);
-                hat.render.material = matDark;
-                opponent.addChild(hat);
-
-                // Shorts
-                const shorts = new pc.Entity('Shorts');
-                shorts.addComponent('render', { type: 'box' });
-                shorts.setLocalScale(0.38, 0.2, 0.24);
-                shorts.setLocalPosition(0, 0.85, 0);
-                shorts.render.material = matShorts;
-                opponent.addChild(shorts);
-
-                // Legs
-                const addLeg = (xOff) => {
-                    const leg = new pc.Entity();
-                    leg.addComponent('render', { type: 'box' });
-                    leg.setLocalScale(0.12, 0.5, 0.12);
-                    leg.setLocalPosition(xOff, 0.5, 0);
-                    leg.render.material = matSkin;
-                    opponent.addChild(leg);
-                    const shoe = new pc.Entity();
-                    shoe.addComponent('render', { type: 'box' });
-                    shoe.setLocalScale(0.14, 0.08, 0.2);
-                    shoe.setLocalPosition(xOff, 0.22, 0.04);
-                    shoe.render.material = matShoe;
-                    opponent.addChild(shoe);
-                };
-                addLeg(-0.1);
-                addLeg(0.1);
-
-                // Left arm
-                const oppArmL = new pc.Entity('OppArmL');
-                oppArmL.addComponent('render', { type: 'box' });
-                oppArmL.setLocalScale(0.1, 0.4, 0.1);
-                oppArmL.setLocalPosition(-0.28, 1.1, 0);
-                oppArmL.setLocalEulerAngles(0, 0, 15);
-                oppArmL.render.material = matSkin;
-                opponent.addChild(oppArmL);
-
-                // Right arm + paddle (animated for smash)
-                const oppArmR = new pc.Entity('OppArmR');
-                oppArmR.addComponent('render', { type: 'box' });
-                oppArmR.setLocalScale(0.1, 0.4, 0.1);
-                oppArmR.setLocalPosition(0.28, 1.1, 0);
-                oppArmR.setLocalEulerAngles(0, 0, -30);
-                oppArmR.render.material = matSkin;
-                opponent.addChild(oppArmR);
-
-                const oppPaddle = new pc.Entity('OppPaddle');
-                oppPaddle.addComponent('render', { type: 'box' });
-                oppPaddle.setLocalScale(0.18, 0.28, 0.02);
-                oppPaddle.setLocalPosition(0.4, 0.95, 0.15);
-                oppPaddle.setLocalEulerAngles(10, 0, -20);
-                oppPaddle.render.material = matPaddle;
-                opponent.addChild(oppPaddle);
-
-                // Smash animation state
-                let smashAnimT = -1; // -1 = not animating
-                const SMASH_DURATION = 0.25; // fast aggressive swing
-                const oppArmRestPos = new pc.Vec3(0.28, 1.1, 0);
-                const oppArmRestRot = new pc.Vec3(0, 0, -30);
-                const oppPaddleRestPos = new pc.Vec3(0.4, 0.95, 0.15);
-                const oppPaddleRestRot = new pc.Vec3(10, 0, -20);
-
-                app.root.addChild(opponent);
-
-                // --- Gameplay Entities ---
-
-                // Ball
-                const ball = new pc.Entity('Ball');
-                ball.addComponent('render', { type: 'sphere' });
-                ball.render.material = matBall;
-                ball.setLocalScale(BALL_R * 2, BALL_R * 2, BALL_R * 2);
-                ball.addComponent('collision', { type: 'sphere', radius: BALL_R });
-                ball.addComponent('rigidbody', {
-                    type: 'dynamic',
-                    mass: 0.026,
-                    restitution: 0.8,
-                    linearDamping: 0.1,
-                    angularDamping: 0.1
-                });
-                ball.setPosition(0, 5, 0);
-                ball.enabled = false; // Start hidden
-                app.root.addChild(ball);
-
-                // Paddle
-                const paddle = new pc.Entity('Paddle');
-                const paddleVis = new pc.Entity('PaddleVis');
-                paddleVis.addComponent('render', { type: 'box' });
-                paddleVis.setLocalScale(0.22, 0.38, 0.02);
-                paddleVis.render.material = matPaddle;
-
-                const paddleHandle = new pc.Entity('PaddleHandle');
-                paddleHandle.addComponent('render', { type: 'cylinder' });
-                paddleHandle.setLocalScale(0.04, 0.15, 0.04);
-                paddleHandle.setLocalPosition(0, -0.26, 0);
-                paddleHandle.render.material = matDark;
-
-                paddle.addChild(paddleVis);
-                paddle.addChild(paddleHandle);
-
-                // Hit Box (Physics Only)
-                // Much larger than visual
-                paddle.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(0.3, 0.4, 0.1) });
-                paddle.addComponent('rigidbody', { type: 'kinematic' });
-                paddle.setPosition(0, 1, 6.5);
-                paddle.enabled = false; // Only show while finger is on screen
-                app.root.addChild(paddle);
-
-                // --- Logic & State ---
-                let gameState = 'IDLE'; // IDLE, SERVE, PLAY, RETURN
-                let goodDrops = 0, misses = 0;
-                let lastMouseY = 0;
-                let lastPaddlePos = new pc.Vec3();
-                let playerHasHit = false; // track if player has returned the ball
-                const OPP_KITCHEN_Z = -2.13;
-                const OPP_SPEED = 4; // opponent lateral movement speed
-                let oppTargetX = 0;
-
-                // UI Helpers
-                const msgEl = document.getElementById('message');
-                const showMsg = (txt) => {
-                    msgEl.innerText = txt;
-                    msgEl.classList.add('show');
-                    setTimeout(() => msgEl.classList.remove('show'), 1000);
-                };
-                const updateScoreUI = () => {
-                    document.getElementById('good-score').innerText = goodDrops;
-                    document.getElementById('miss-score').innerText = misses;
-                };
-                showMsg('READY?');
-
-                // Game Loop
-                const resetBall = () => {
-                    ball.rigidbody.teleport(0, 10, 0);
-                    ball.rigidbody.linearVelocity = pc.Vec3.ZERO;
-                    ball.rigidbody.angularVelocity = pc.Vec3.ZERO;
-                    ball.enabled = false;
-                    playerHasHit = false;
-                };
-
-                const serve = () => {
-                    gameState = 'PLAY';
-                    playerHasHit = false;
-                    ball.enabled = true;
-                    // Serve from opponent at kitchen line
-                    const oppPos = opponent.getPosition();
-                    ball.rigidbody.teleport(oppPos.x, 1.3, oppPos.z);
-                    ball.rigidbody.activate();
-
-                    // Aim straight at the player (camera z~9, paddle z~6.5)
-                    // Gentle arc toward center of player's court
-                    const vz = 5 + Math.random() * 2;
-                    const vy = 2 + Math.random() * 1;
-                    const vx = (Math.random() - 0.5) * 0.5; // very little lateral drift
-
-                    ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
-                    document.getElementById('hint').style.opacity = 0;
-                };
-
-                // Opponent smash - sends ball back hard + animate
-                const opponentSmash = () => {
-                    gameState = 'RETURN';
-                    smashAnimT = 0; // start smash animation
-
-                    // Teleport ball to opponent paddle for visual impact
-                    const oppPos = opponent.getPosition();
-                    ball.rigidbody.teleport(oppPos.x + 0.3, 1.5, oppPos.z + 0.2);
-                    ball.rigidbody.activate();
-
-                    // Delay the actual hit to sync with swing contact
-                    setTimeout(() => {
-                        if (gameState !== 'RETURN') return;
-                        const vz = 10 + Math.random() * 4;
-                        const vy = 1 + Math.random() * 0.5;
-                        const vx = (Math.random() - 0.5) * 2;
-                        ball.rigidbody.activate();
-                        ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
-                        ball.rigidbody.angularVelocity = new pc.Vec3(-20, 0, 0);
-                    }, 100);
-                };
-
-                // Paddle Control
-                // We need a plane to raycast against at Z=6.5
-                // Z-plane at 6.5 facing Z axis
-                const controlPlanePoint = new pc.Vec3(0, 0, 6.5);
-                const controlPlaneNormal = new pc.Vec3(0, 0, 1);
-
-                const ray = new pc.Ray();
-                const hitPoint = new pc.Vec3();
-
-                // Hit Zone: extremely generous - ball just needs to be on player's half
-                const canHit = (ballWorldPos) => {
-                    return ballWorldPos.z > 0 && ballWorldPos.y > -0.5;
-                };
-
-                let swipeStartPos = new pc.Vec2();
-                let swipeStartTime = 0;
-                let isSwiping = false;
-
-                // Input Listeners for Swipe
-                window.addEventListener('pointerdown', (e) => {
-                    paddle.enabled = true;
-                    if (gameState === 'IDLE') {
-                        serve();
-                    } else if (gameState === 'PLAY') {
-                        isSwiping = true;
-                        swipeStartTime = performance.now();
-                        swipeStartPos.set(e.clientX, e.clientY);
-                    }
-                });
-
-                window.addEventListener('pointerup', (e) => {
-                    paddle.enabled = false;
-                    if (!isSwiping || gameState !== 'PLAY') return;
-                    isSwiping = false;
-
-                    const ballPos = ball.getPosition();
-
-                    // Check Hit Zone
-                    if (canHit(ballPos)) {
-                        playerHasHit = true;
-                        const dt = (performance.now() - swipeStartTime) / 1000;
-                        const dx = e.clientX - swipeStartPos.x;
-                        const dy = swipeStartPos.y - e.clientY; // Up is positive
-
-                        // Calculate Speed (px/s)
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        const speed = dist / Math.max(dt, 0.01);
-
-                        // Swipe speed determines shot arc
-                        // Slow swipe = low soft drop, fast swipe = high powerful shot
-                        const intensity = Math.min(1, Math.max(0, (speed - 50) / 1200));
-
-                        // More arc on all shots: high base speedY for nice visible arc
-                        // Gentle = just clears net with soft arc, fast = high lob
-                        const speedZ = 6 + intensity * 8;
-                        const speedY = 4 + intensity * 6;
-
-                        // Steering based on swipe X direction
-                        const steerX = dx / window.innerWidth * 6;
-
-                        ball.rigidbody.activate();
-                        ball.rigidbody.linearVelocity = new pc.Vec3(
-                            steerX,
-                            Math.min(speedY, 10),
-                            -Math.min(speedZ, 15)
-                        );
-                        ball.rigidbody.angularVelocity = new pc.Vec3(intensity * 10, 0, 0);
-                    }
-                });
-
-                // Custom Input Handling for Raycast
-                window.addEventListener('pointermove', (e) => {
-                    // Convert to -1..1
-                    const x = (e.clientX / window.innerWidth) * 2 - 1;
-                    const y = -(e.clientY / window.innerHeight) * 2 + 1;
-
-                    // Update Camera Look slightly
-                    camera.lookAt(x * 0.5, 0.8 + y * 0.5, 0);
-
-                    // Raycast for Paddle
-                    const start = new pc.Vec3();
-                    const end = new pc.Vec3();
-                    camera.camera.screenToWorld(e.clientX, e.clientY, camera.camera.nearClip, start);
-                    camera.camera.screenToWorld(e.clientX, e.clientY, camera.camera.farClip, end);
-
-                    ray.origin.copy(start);
-                    ray.direction.copy(end).sub(start).normalize();
-
-                    // Manual Ray-Plane Intersection
-                    // t = ((planePoint - rayOrigin) . planeNormal) / (rayDir . planeNormal)
-                    const denom = ray.direction.dot(controlPlaneNormal);
-                    if (Math.abs(denom) > 1e-6) {
-                        const vec = new pc.Vec3().sub2(controlPlanePoint, ray.origin);
-                        const t = vec.dot(controlPlaneNormal) / denom;
-
-                        if (t >= 0) {
-                            hitPoint.copy(ray.origin).add(ray.direction.clone().scale(t));
-
-                            // Clamp
-                            const px = pc.math.clamp(hitPoint.x, -COURT_W / 2 - 0.5, COURT_W / 2 + 0.5);
-                            const py = pc.math.clamp(hitPoint.y, 0.2, 2.5);
-
-                            lastPaddlePos.copy(paddle.getPosition());
-                            paddle.rigidbody.teleport(px, py, 6.5);
-
-                            // Visual Tilt
-                            paddle.setLocalEulerAngles(-10 + py * 5, px * 10, 0);
-
-                            lastMouseY = py; // Store World Y for speed calc
-                        }
-                    }
-                });
-
-                // Game Loop Logic
-                const KITCHEN_Z = -2.13;
-                const OPP_REACH_HEIGHT = 1.6; // head height - only smash if ball is this high or above
-                const NEXT_BALL_DELAY = 1200; // ms before next serve
-
-                const endRound = () => {
-                    gameState = 'IDLE';
-                    resetBall();
-                    setTimeout(() => { if (gameState === 'IDLE') serve(); }, NEXT_BALL_DELAY);
-                };
-
-                app.on('update', (dt) => {
-                    const bPos = ball.getPosition();
-                    const bVel = ball.rigidbody.linearVelocity;
-
-                    // --- Smash animation ---
-                    if (smashAnimT >= 0) {
-                        smashAnimT += dt;
-                        const t = Math.min(smashAnimT / SMASH_DURATION, 1);
-
-                        if (t < 0.3) {
-                            // Wind up: arm goes way back and up (30% of time)
-                            const w = t / 0.3;
-                            oppArmR.setLocalPosition(0.28, 1.1 + w * 0.6, -w * 0.4);
-                            oppArmR.setLocalEulerAngles(-90 * w, 0, -30 + 30 * w);
-                            oppPaddle.setLocalPosition(0.4, 0.95 + w * 0.7, 0.15 - w * 0.5);
-                            oppPaddle.setLocalEulerAngles(10 - 110 * w, 0, -20 + 15 * w);
-                        } else {
-                            // Swing down HARD: explosive forward smash (70% of time)
-                            const s = (t - 0.3) / 0.7;
-                            const ease = 1 - Math.pow(1 - s, 2); // fast ease out
-                            oppArmR.setLocalPosition(0.28, 1.7 - ease * 0.8, -0.4 + ease * 0.7);
-                            oppArmR.setLocalEulerAngles(-90 + ease * 130, 0, 0 - ease * 30);
-                            oppPaddle.setLocalPosition(0.4, 1.65 - ease * 0.9, -0.35 + ease * 0.8);
-                            oppPaddle.setLocalEulerAngles(-100 + ease * 140, 0, -5);
-                        }
-
-                        if (t >= 1) {
-                            // Reset to rest pose
-                            smashAnimT = -1;
-                            oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y, oppArmRestPos.z);
-                            oppArmR.setLocalEulerAngles(oppArmRestRot.x, oppArmRestRot.y, oppArmRestRot.z);
-                            oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y, oppPaddleRestPos.z);
-                            oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x, oppPaddleRestRot.y, oppPaddleRestRot.z);
-                        }
+                    console.log('[PocketPickleball] initGame called, Ammo type:', typeof Ammo);
+
+                    // Shim missing methods for older Ammo.js builds
+                    if (Ammo.btRigidBody && Ammo.btRigidBody.prototype && !Ammo.btRigidBody.prototype.setRollingFriction) {
+                        Ammo.btRigidBody.prototype.setRollingFriction = function () { };
+                        Ammo.btRigidBody.prototype.setSpinningFriction = function () { };
+                        console.log('[PocketPickleball] Shimmed missing Ammo.js friction methods');
                     }
 
-                    // --- Opponent AI: track ball laterally ---
-                    if (ball.enabled) {
-                        if (bVel.z < 0) {
-                            oppTargetX = bPos.x;
-                        }
+                    // --- Constants ---
+                    const COURT_W = 6.1;
+                    const COURT_L = 13.41;
+                    const NET_H = 0.914;
+                    const BALL_R = 0.07;
+
+                    // --- Create Application ---
+                    const canvas = document.getElementById('application');
+                    const app = new pc.Application(canvas, {
+                        mouse: new pc.Mouse(canvas),
+                        touch: new pc.TouchDevice(canvas),
+                        elementInput: new pc.ElementInput(canvas),
+                        keyboard: new pc.Keyboard(window)
+                    });
+
+                    // Start app first - initializes physics (Ammo.js) system
+                    app.start();
+
+                    // Set fill mode to fill the window
+                    app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
+                    app.setCanvasResolution(pc.RESOLUTION_AUTO);
+
+                    // Ensure canvas resizes when window changes
+                    window.addEventListener('resize', () => app.resizeCanvas());
+
+                    // --- Setup Scene ---
+                    // Add Light
+                    const light = new pc.Entity('DirectionalLight');
+                    light.addComponent('light', {
+                        type: 'directional',
+                        color: new pc.Color(1, 1, 1),
+                        castShadows: true,
+                        intensity: 1.2,
+                        shadowBias: 0.2,
+                        normalOffsetBias: 0.05,
+                        shadowDistance: 20
+                    });
+                    light.setLocalEulerAngles(45, 30, 0);
+                    app.root.addChild(light);
+
+                    const ambient = new pc.Entity('AmbientLight');
+                    ambient.addComponent('light', {
+                        type: 'point',
+                        color: new pc.Color(0.8, 0.8, 1),
+                        intensity: 0.5,
+                        range: 100
+                    });
+                    ambient.setPosition(0, 10, 0);
+                    app.root.addChild(ambient);
+
+                    // Add Camera
+                    const camera = new pc.Entity('MainCamera');
+                    camera.addComponent('camera', {
+                        clearColor: new pc.Color(0.1, 0.11, 0.17), // Dark blue-ish bg
+                        farClip: 100,
+                        fov: 60
+                    });
+                    camera.setPosition(0, 2.5, 9);
+                    camera.lookAt(0, 0.8, 0);
+                    app.root.addChild(camera);
+
+                    // --- Materials ---
+                    const createMaterial = (color) => {
+                        const material = new pc.StandardMaterial();
+                        material.diffuse = color;
+                        material.update();
+                        return material;
+                    };
+                    const matCourt = createMaterial(new pc.Color(0.14, 0.38, 0.54)); // 0x24628a
+                    const matLine = createMaterial(new pc.Color(1, 1, 1));
+                    const matNet = createMaterial(new pc.Color(1, 1, 1));
+                    matNet.rollOffFactor = 0; // Simple wireframe-ish look
+                    matNet.opacity = 0.3;
+                    matNet.blendType = pc.BLEND_NORMAL;
+                    matNet.update();
+
+                    const matBall = createMaterial(new pc.Color(0.8, 1.0, 0)); // #ccff00
+                    matBall.emissive = new pc.Color(0.2, 0.25, 0);
+                    matBall.update();
+
+                    const matPaddle = createMaterial(new pc.Color(0.9, 0.22, 0.27)); // #e63946
+                    const matDark = createMaterial(new pc.Color(0.1, 0.1, 0.1));
+
+                    // --- Environment ---
+
+                    // Floor (Visual only, below court)
+                    const floor = new pc.Entity('Floor');
+                    floor.addComponent('render', { type: 'cylinder' });
+                    floor.setLocalScale(40, 0.1, 40);
+                    floor.setLocalPosition(0, -0.15, 0);
+                    floor.render.material = matDark;
+                    app.root.addChild(floor);
+
+                    // Court Base (Physics + Visual)
+                    const court = new pc.Entity('Court');
+                    court.addComponent('render', { type: 'plane' });
+                    court.setLocalScale(COURT_W, 1, COURT_L);
+                    court.setLocalPosition(0, 0, 0);
+                    court.render.material = matCourt;
+                    // Add collision/rigidbody
+                    court.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2, 0.1, COURT_L / 2) });
+                    court.addComponent('rigidbody', { type: 'static', friction: 0.1, restitution: 0.75 });
+                    // Note: Plane visual is flat, but collision box needs depth. We offset pos slightly
+                    // PlayCanvas plane faces Y up.
+                    app.root.addChild(court);
+
+                    // Court Friction Fix (Since PC doesn't have fine-grained material pairs easily accessible in JS API without deep dive, we rely on body properties)
+
+                    // Lines
+                    const addLine = (w, l, x, z) => {
+                        const line = new pc.Entity();
+                        line.addComponent('render', { type: 'plane' });
+                        line.setLocalScale(w, 1, l);
+                        line.setLocalPosition(x, 0.01, z); // Raised
+                        line.render.material = matLine;
+                        app.root.addChild(line);
+                    };
+                    addLine(COURT_W, 0.05, 0, COURT_L / 2);
+                    addLine(COURT_W, 0.05, 0, -COURT_L / 2);
+                    addLine(0.05, COURT_L, COURT_W / 2, 0);
+                    addLine(0.05, COURT_L, -COURT_W / 2, 0);
+                    addLine(COURT_W, 0.05, 0, 2.13);
+                    addLine(COURT_W, 0.05, 0, -2.13);
+                    addLine(0.05, COURT_L - 4.26, 0, 0);
+
+                    // Net
+                    const net = new pc.Entity('Net');
+                    const netVis = new pc.Entity('NetVisual');
+                    netVis.addComponent('render', { type: 'box' });
+                    netVis.setLocalScale(COURT_W + 0.4, NET_H, 0.02);
+                    netVis.setLocalPosition(0, NET_H / 2, 0);
+                    netVis.render.material = matNet;
+
+                    const tape = new pc.Entity('NetTape');
+                    tape.addComponent('render', { type: 'box' });
+                    tape.setLocalScale(COURT_W + 0.4, 0.05, 0.05);
+                    tape.setLocalPosition(0, NET_H, 0);
+                    tape.render.material = matLine;
+
+                    const postL = new pc.Entity('PostL');
+                    postL.addComponent('render', { type: 'cylinder' });
+                    postL.setLocalScale(0.08, NET_H + 0.1, 0.08);
+                    postL.setLocalPosition(-(COURT_W / 2 + 0.2), NET_H / 2, 0);
+                    postL.render.material = matDark;
+
+                    const postR = new pc.Entity('PostR');
+                    postR.addComponent('render', { type: 'cylinder' });
+                    postR.setLocalScale(0.08, NET_H + 0.1, 0.08);
+                    postR.setLocalPosition(COURT_W / 2 + 0.2, NET_H / 2, 0);
+                    postR.render.material = matDark;
+
+                    net.addChild(netVis); net.addChild(tape); net.addChild(postL); net.addChild(postR);
+                    net.setLocalPosition(0, 0, 0);
+                    app.root.addChild(net);
+
+                    // Net collider - separate entity so collision center matches visual center
+                    const netCol = new pc.Entity('NetCollider');
+                    netCol.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(COURT_W / 2 + 0.2, NET_H / 2, 0.05) });
+                    netCol.addComponent('rigidbody', { type: 'static' });
+                    netCol.setLocalPosition(0, NET_H / 2, 0);
+                    app.root.addChild(netCol);
+
+                    // --- Opponent ---
+                    const matSkin = createMaterial(new pc.Color(0.85, 0.65, 0.5));
+                    const matShirt = createMaterial(new pc.Color(0.2, 0.4, 0.8));
+                    const matShorts = createMaterial(new pc.Color(0.15, 0.15, 0.15));
+                    const matShoe = createMaterial(new pc.Color(1, 1, 1));
+
+                    const opponent = new pc.Entity('Opponent');
+                    // Kitchen line is at z = -2.13
+                    opponent.setLocalPosition(0, 0, -2.13);
+
+                    // Torso
+                    const torso = new pc.Entity('Torso');
+                    torso.addComponent('render', { type: 'box' });
+                    torso.setLocalScale(0.4, 0.5, 0.25);
+                    torso.setLocalPosition(0, 1.2, 0);
+                    torso.render.material = matShirt;
+                    opponent.addChild(torso);
+
+                    // Head
+                    const head = new pc.Entity('Head');
+                    head.addComponent('render', { type: 'sphere' });
+                    head.setLocalScale(0.22, 0.22, 0.22);
+                    head.setLocalPosition(0, 1.6, 0);
+                    head.render.material = matSkin;
+                    opponent.addChild(head);
+
+                    // Hat/visor
+                    const hat = new pc.Entity('Hat');
+                    hat.addComponent('render', { type: 'cylinder' });
+                    hat.setLocalScale(0.26, 0.04, 0.26);
+                    hat.setLocalPosition(0, 1.72, 0);
+                    hat.render.material = matDark;
+                    opponent.addChild(hat);
+
+                    // Shorts
+                    const shorts = new pc.Entity('Shorts');
+                    shorts.addComponent('render', { type: 'box' });
+                    shorts.setLocalScale(0.38, 0.2, 0.24);
+                    shorts.setLocalPosition(0, 0.85, 0);
+                    shorts.render.material = matShorts;
+                    opponent.addChild(shorts);
+
+                    // Legs
+                    const addLeg = (xOff) => {
+                        const leg = new pc.Entity();
+                        leg.addComponent('render', { type: 'box' });
+                        leg.setLocalScale(0.12, 0.5, 0.12);
+                        leg.setLocalPosition(xOff, 0.5, 0);
+                        leg.render.material = matSkin;
+                        opponent.addChild(leg);
+                        const shoe = new pc.Entity();
+                        shoe.addComponent('render', { type: 'box' });
+                        shoe.setLocalScale(0.14, 0.08, 0.2);
+                        shoe.setLocalPosition(xOff, 0.22, 0.04);
+                        shoe.render.material = matShoe;
+                        opponent.addChild(shoe);
+                    };
+                    addLeg(-0.1);
+                    addLeg(0.1);
+
+                    // Left arm
+                    const oppArmL = new pc.Entity('OppArmL');
+                    oppArmL.addComponent('render', { type: 'box' });
+                    oppArmL.setLocalScale(0.1, 0.4, 0.1);
+                    oppArmL.setLocalPosition(-0.28, 1.1, 0);
+                    oppArmL.setLocalEulerAngles(0, 0, 15);
+                    oppArmL.render.material = matSkin;
+                    opponent.addChild(oppArmL);
+
+                    // Right arm + paddle (animated for smash)
+                    const oppArmR = new pc.Entity('OppArmR');
+                    oppArmR.addComponent('render', { type: 'box' });
+                    oppArmR.setLocalScale(0.1, 0.4, 0.1);
+                    oppArmR.setLocalPosition(0.28, 1.1, 0);
+                    oppArmR.setLocalEulerAngles(0, 0, -30);
+                    oppArmR.render.material = matSkin;
+                    opponent.addChild(oppArmR);
+
+                    const oppPaddle = new pc.Entity('OppPaddle');
+                    oppPaddle.addComponent('render', { type: 'box' });
+                    oppPaddle.setLocalScale(0.18, 0.28, 0.02);
+                    oppPaddle.setLocalPosition(0.4, 0.95, 0.15);
+                    oppPaddle.setLocalEulerAngles(10, 0, -20);
+                    oppPaddle.render.material = matPaddle;
+                    opponent.addChild(oppPaddle);
+
+                    // Smash animation state
+                    let smashAnimT = -1; // -1 = not animating
+                    const SMASH_DURATION = 0.25; // fast aggressive swing
+                    const oppArmRestPos = new pc.Vec3(0.28, 1.1, 0);
+                    const oppArmRestRot = new pc.Vec3(0, 0, -30);
+                    const oppPaddleRestPos = new pc.Vec3(0.4, 0.95, 0.15);
+                    const oppPaddleRestRot = new pc.Vec3(10, 0, -20);
+
+                    app.root.addChild(opponent);
+
+                    // --- Gameplay Entities ---
+
+                    // Ball
+                    const ball = new pc.Entity('Ball');
+                    ball.addComponent('render', { type: 'sphere' });
+                    ball.render.material = matBall;
+                    ball.setLocalScale(BALL_R * 2, BALL_R * 2, BALL_R * 2);
+                    ball.addComponent('collision', { type: 'sphere', radius: BALL_R });
+                    ball.addComponent('rigidbody', {
+                        type: 'dynamic',
+                        mass: 0.026,
+                        restitution: 0.8,
+                        linearDamping: 0.1,
+                        angularDamping: 0.1
+                    });
+                    ball.setPosition(0, 5, 0);
+                    ball.enabled = false; // Start hidden
+                    app.root.addChild(ball);
+
+                    // Paddle
+                    const paddle = new pc.Entity('Paddle');
+                    const paddleVis = new pc.Entity('PaddleVis');
+                    paddleVis.addComponent('render', { type: 'box' });
+                    paddleVis.setLocalScale(0.22, 0.38, 0.02);
+                    paddleVis.render.material = matPaddle;
+
+                    const paddleHandle = new pc.Entity('PaddleHandle');
+                    paddleHandle.addComponent('render', { type: 'cylinder' });
+                    paddleHandle.setLocalScale(0.04, 0.15, 0.04);
+                    paddleHandle.setLocalPosition(0, -0.26, 0);
+                    paddleHandle.render.material = matDark;
+
+                    paddle.addChild(paddleVis);
+                    paddle.addChild(paddleHandle);
+
+                    // Hit Box (Physics Only)
+                    // Much larger than visual
+                    paddle.addComponent('collision', { type: 'box', halfExtents: new pc.Vec3(0.3, 0.4, 0.1) });
+                    paddle.addComponent('rigidbody', { type: 'kinematic' });
+                    paddle.setPosition(0, 1, 6.5);
+                    paddle.enabled = false; // Only show while finger is on screen
+                    app.root.addChild(paddle);
+
+                    // --- Logic & State ---
+                    let gameState = 'IDLE'; // IDLE, SERVE, PLAY, RETURN
+                    let goodDrops = 0, misses = 0;
+                    let lastMouseY = 0;
+                    let lastPaddlePos = new pc.Vec3();
+                    let playerHasHit = false; // track if player has returned the ball
+                    const OPP_KITCHEN_Z = -2.13;
+                    const OPP_SPEED = 4; // opponent lateral movement speed
+                    let oppTargetX = 0;
+
+                    // UI Helpers
+                    const msgEl = document.getElementById('message');
+                    const showMsg = (txt) => {
+                        msgEl.innerText = txt;
+                        msgEl.classList.add('show');
+                        setTimeout(() => msgEl.classList.remove('show'), 1000);
+                    };
+                    const updateScoreUI = () => {
+                        document.getElementById('good-score').innerText = goodDrops;
+                        document.getElementById('miss-score').innerText = misses;
+                    };
+                    showMsg('READY?');
+
+                    // Game Loop
+                    const resetBall = () => {
+                        ball.rigidbody.teleport(0, 10, 0);
+                        ball.rigidbody.linearVelocity = pc.Vec3.ZERO;
+                        ball.rigidbody.angularVelocity = pc.Vec3.ZERO;
+                        ball.enabled = false;
+                        playerHasHit = false;
+                    };
+
+                    const serve = () => {
+                        gameState = 'PLAY';
+                        playerHasHit = false;
+                        ball.enabled = true;
+                        // Serve from opponent at kitchen line
                         const oppPos = opponent.getPosition();
-                        const dx = oppTargetX - oppPos.x;
-                        const moveX = Math.sign(dx) * Math.min(Math.abs(dx), OPP_SPEED * dt);
-                        opponent.setPosition(
-                            pc.math.clamp(oppPos.x + moveX, -COURT_W / 2 + 0.3, COURT_W / 2 - 0.3),
-                            0,
-                            OPP_KITCHEN_Z
-                        );
-                    }
+                        ball.rigidbody.teleport(oppPos.x, 1.3, oppPos.z);
+                        ball.rigidbody.activate();
 
-                    if ((gameState === 'PLAY' || gameState === 'RETURN') && ball.enabled) {
-                        // Ball growing effect (perspective)
-                        const scale = 1 + pc.math.clamp((bPos.z + 7) / 14, 0, 1) * 0.8;
-                        ball.setLocalScale(BALL_R * 2 * scale, BALL_R * 2 * scale, BALL_R * 2 * scale);
+                        // Aim straight at the player (camera z~9, paddle z~6.5)
+                        // Strong arc toward center of player's court - travels far with one bounce
+                        const vz = 8 + Math.random() * 4; // Increased from 5-7 to 8-12 for longer distance
+                        const vy = 3.5 + Math.random() * 2; // Increased from 2-3 to 3.5-5.5 for higher arc
+                        const vx = (Math.random() - 0.5) * 0.5; // very little lateral drift
 
-                        // --- Shot categorization (after player has hit) ---
-                        if (playerHasHit && gameState === 'PLAY') {
+                        ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
+                        document.getElementById('hint').style.opacity = 0;
+                    };
 
-                            // SHORT: ball hit the net and bouncing back
-                            if (bPos.z > 0.3 && bVel.z > 0 && bVel.z < 3) {
-                                misses++;
-                                updateScoreUI();
-                                showMsg('SHORT!');
-                                endRound();
-                                return;
+                    // Opponent smash - sends ball back hard + animate
+                    const opponentSmash = () => {
+                        gameState = 'RETURN';
+                        smashAnimT = 0; // start smash animation
+
+                        // Teleport ball to opponent paddle for visual impact
+                        const oppPos = opponent.getPosition();
+                        ball.rigidbody.teleport(oppPos.x + 0.3, 1.5, oppPos.z + 0.2);
+                        ball.rigidbody.activate();
+
+                        // Delay the actual hit to sync with swing contact
+                        setTimeout(() => {
+                            if (gameState !== 'RETURN') return;
+                            // BIG SMASH: fast, high, and dramatic
+                            const vz = 16 + Math.random() * 6; // Increased from 10-14 to 16-22 for speed
+                            const vy = 4 + Math.random() * 3; // Increased from 1-1.5 to 4-7 for big bounce
+                            const vx = (Math.random() - 0.5) * 3; // Increased lateral variation
+                            ball.rigidbody.activate();
+                            ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
+                            ball.rigidbody.angularVelocity = new pc.Vec3(-30, 0, 0); // More spin
+                        }, 100);
+                    };
+
+                    // Paddle Control
+                    // We need a plane to raycast against at Z=6.5
+                    // Z-plane at 6.5 facing Z axis
+                    const controlPlanePoint = new pc.Vec3(0, 0, 6.5);
+                    const controlPlaneNormal = new pc.Vec3(0, 0, 1);
+
+                    const ray = new pc.Ray();
+                    const hitPoint = new pc.Vec3();
+
+                    // Hit Zone: extremely generous - ball just needs to be on player's half
+                    const canHit = (ballWorldPos) => {
+                        return ballWorldPos.z > 0 && ballWorldPos.y > -0.5;
+                    };
+
+                    let swipeStartPos = new pc.Vec2();
+                    let swipeStartTime = 0;
+                    let isSwiping = false;
+
+                    // Input Listeners for Swipe
+                    window.addEventListener('pointerdown', (e) => {
+                        paddle.enabled = true;
+                        if (gameState === 'IDLE') {
+                            serve();
+                        } else if (gameState === 'PLAY') {
+                            isSwiping = true;
+                            swipeStartTime = performance.now();
+                            swipeStartPos.set(e.clientX, e.clientY);
+                        }
+                    });
+
+                    window.addEventListener('pointerup', (e) => {
+                        paddle.enabled = false;
+                        if (!isSwiping || gameState !== 'PLAY') return;
+                        isSwiping = false;
+
+                        const ballPos = ball.getPosition();
+
+                        // Check Hit Zone
+                        if (canHit(ballPos)) {
+                            playerHasHit = true;
+                            const dt = (performance.now() - swipeStartTime) / 1000;
+                            const dx = e.clientX - swipeStartPos.x;
+                            const dy = swipeStartPos.y - e.clientY; // Up is positive
+
+                            // Calculate Speed (px/s)
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            const speed = dist / Math.max(dt, 0.01);
+
+                            // Swipe speed determines shot arc
+                            // Slow swipe = low soft drop, fast swipe = high powerful shot
+                            const intensity = Math.min(1, Math.max(0, (speed - 50) / 1200));
+
+                            // More arc on all shots: high base speedY for nice visible arc
+                            // Gentle = just clears net with soft arc, fast = high lob
+                            const speedZ = 6 + intensity * 8;
+                            const speedY = 4 + intensity * 6;
+
+                            // Steering based on swipe X direction
+                            const steerX = dx / window.innerWidth * 6;
+
+                            ball.rigidbody.activate();
+                            ball.rigidbody.linearVelocity = new pc.Vec3(
+                                steerX,
+                                Math.min(speedY, 10),
+                                -Math.min(speedZ, 15)
+                            );
+                            ball.rigidbody.angularVelocity = new pc.Vec3(intensity * 10, 0, 0);
+                        }
+                    });
+
+                    // Custom Input Handling for Raycast
+                    window.addEventListener('pointermove', (e) => {
+                        // Convert to -1..1
+                        const x = (e.clientX / window.innerWidth) * 2 - 1;
+                        const y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                        // Update Camera Look slightly
+                        camera.lookAt(x * 0.5, 0.8 + y * 0.5, 0);
+
+                        // Raycast for Paddle
+                        const start = new pc.Vec3();
+                        const end = new pc.Vec3();
+                        camera.camera.screenToWorld(e.clientX, e.clientY, camera.camera.nearClip, start);
+                        camera.camera.screenToWorld(e.clientX, e.clientY, camera.camera.farClip, end);
+
+                        ray.origin.copy(start);
+                        ray.direction.copy(end).sub(start).normalize();
+
+                        // Manual Ray-Plane Intersection
+                        // t = ((planePoint - rayOrigin) . planeNormal) / (rayDir . planeNormal)
+                        const denom = ray.direction.dot(controlPlaneNormal);
+                        if (Math.abs(denom) > 1e-6) {
+                            const vec = new pc.Vec3().sub2(controlPlanePoint, ray.origin);
+                            const t = vec.dot(controlPlaneNormal) / denom;
+
+                            if (t >= 0) {
+                                hitPoint.copy(ray.origin).add(ray.direction.clone().scale(t));
+
+                                // Clamp
+                                const px = pc.math.clamp(hitPoint.x, -COURT_W / 2 - 0.5, COURT_W / 2 + 0.5);
+                                const py = pc.math.clamp(hitPoint.y, 0.2, 2.5);
+
+                                lastPaddlePos.copy(paddle.getPosition());
+                                paddle.rigidbody.teleport(px, py, 6.5);
+
+                                // Visual Tilt
+                                paddle.setLocalEulerAngles(-10 + py * 5, px * 10, 0);
+
+                                lastMouseY = py; // Store World Y for speed calc
+                            }
+                        }
+                    });
+
+                    // Game Loop Logic
+                    const KITCHEN_Z = -2.13;
+                    const OPP_REACH_HEIGHT = 1.6; // head height - only smash if ball is this high or above
+                    const NEXT_BALL_DELAY = 600; // ms before next serve - reduced from 1200 to avoid waiting for rolling balls
+
+                    const endRound = () => {
+                        gameState = 'IDLE';
+                        resetBall();
+                        setTimeout(() => { if (gameState === 'IDLE') serve(); }, NEXT_BALL_DELAY);
+                    };
+
+                    app.on('update', (dt) => {
+                        const bPos = ball.getPosition();
+                        const bVel = ball.rigidbody.linearVelocity;
+
+                        // --- Smash animation ---
+                        if (smashAnimT >= 0) {
+                            smashAnimT += dt;
+                            const t = Math.min(smashAnimT / SMASH_DURATION, 1);
+
+                            if (t < 0.3) {
+                                // Wind up: arm goes way back and up (30% of time)
+                                const w = t / 0.3;
+                                oppArmR.setLocalPosition(0.28, 1.1 + w * 0.6, -w * 0.4);
+                                oppArmR.setLocalEulerAngles(-90 * w, 0, -30 + 30 * w);
+                                oppPaddle.setLocalPosition(0.4, 0.95 + w * 0.7, 0.15 - w * 0.5);
+                                oppPaddle.setLocalEulerAngles(10 - 110 * w, 0, -20 + 15 * w);
+                            } else {
+                                // Swing down HARD: explosive forward smash (70% of time)
+                                const s = (t - 0.3) / 0.7;
+                                const ease = 1 - Math.pow(1 - s, 2); // fast ease out
+                                oppArmR.setLocalPosition(0.28, 1.7 - ease * 0.8, -0.4 + ease * 0.7);
+                                oppArmR.setLocalEulerAngles(-90 + ease * 130, 0, 0 - ease * 30);
+                                oppPaddle.setLocalPosition(0.4, 1.65 - ease * 0.9, -0.35 + ease * 0.8);
+                                oppPaddle.setLocalEulerAngles(-100 + ease * 140, 0, -5);
                             }
 
-                            // Ball crossed the net (z < 0)
-                            if (bPos.z < -0.3) {
-                                // TOO HIGH: ball is above opponent head height
-                                if (bPos.y > OPP_REACH_HEIGHT) {
+                            if (t >= 1) {
+                                // Reset to rest pose
+                                smashAnimT = -1;
+                                oppArmR.setLocalPosition(oppArmRestPos.x, oppArmRestPos.y, oppArmRestPos.z);
+                                oppArmR.setLocalEulerAngles(oppArmRestRot.x, oppArmRestRot.y, oppArmRestRot.z);
+                                oppPaddle.setLocalPosition(oppPaddleRestPos.x, oppPaddleRestPos.y, oppPaddleRestPos.z);
+                                oppPaddle.setLocalEulerAngles(oppPaddleRestRot.x, oppPaddleRestRot.y, oppPaddleRestRot.z);
+                            }
+                        }
+
+                        // --- Opponent AI: track ball laterally ---
+                        if (ball.enabled) {
+                            if (bVel.z < 0) {
+                                oppTargetX = bPos.x;
+                            }
+                            const oppPos = opponent.getPosition();
+                            const dx = oppTargetX - oppPos.x;
+                            const moveX = Math.sign(dx) * Math.min(Math.abs(dx), OPP_SPEED * dt);
+                            opponent.setPosition(
+                                pc.math.clamp(oppPos.x + moveX, -COURT_W / 2 + 0.3, COURT_W / 2 - 0.3),
+                                0,
+                                OPP_KITCHEN_Z
+                            );
+                        }
+
+                        if ((gameState === 'PLAY' || gameState === 'RETURN') && ball.enabled) {
+                            // Ball growing effect (perspective)
+                            const scale = 1 + pc.math.clamp((bPos.z + 7) / 14, 0, 1) * 0.8;
+                            ball.setLocalScale(BALL_R * 2 * scale, BALL_R * 2 * scale, BALL_R * 2 * scale);
+
+                            // --- Shot categorization (after player has hit) ---
+                            if (playerHasHit && gameState === 'PLAY') {
+
+                                // SHORT: ball hit the net and bouncing back
+                                if (bPos.z > 0.3 && bVel.z > 0 && bVel.z < 3) {
                                     misses++;
                                     updateScoreUI();
-                                    showMsg('TOO HIGH!');
-                                    opponentSmash();
-                                    playerHasHit = false;
-                                    return;
-                                }
-
-                                // GOOD DROP: ball is descending and low in kitchen zone
-                                if (bPos.z > KITCHEN_Z && bPos.y < NET_H + 0.3 && bVel.y < 0) {
-                                    goodDrops++;
-                                    updateScoreUI();
-                                    showMsg('GOOD DROP!');
+                                    showMsg('SHORT!');
                                     endRound();
                                     return;
                                 }
 
-                                // TOO DEEP: past kitchen line
-                                if (bPos.z < KITCHEN_Z && bPos.y < OPP_REACH_HEIGHT) {
-                                    misses++;
-                                    updateScoreUI();
-                                    showMsg('TOO DEEP!');
-                                    opponentSmash();
-                                    playerHasHit = false;
-                                    return;
+                                // Ball crossed the net (z < 0)
+                                if (bPos.z < -0.3) {
+                                    // TOO HIGH: ball is above opponent head height
+                                    if (bPos.y > OPP_REACH_HEIGHT) {
+                                        misses++;
+                                        updateScoreUI();
+                                        showMsg('TOO HIGH!');
+                                        opponentSmash();
+                                        playerHasHit = false;
+                                        return;
+                                    }
+
+                                    // GOOD DROP: ball is descending and low in kitchen zone
+                                    if (bPos.z > KITCHEN_Z && bPos.y < NET_H + 0.3 && bVel.y < 0) {
+                                        goodDrops++;
+                                        updateScoreUI();
+                                        showMsg('GOOD DROP!');
+                                        endRound();
+                                        return;
+                                    }
+
+                                    // TOO DEEP: past kitchen line
+                                    if (bPos.z < KITCHEN_Z && bPos.y < OPP_REACH_HEIGHT) {
+                                        misses++;
+                                        updateScoreUI();
+                                        showMsg('TOO DEEP!');
+                                        opponentSmash();
+                                        playerHasHit = false;
+                                        return;
+                                    }
                                 }
                             }
-                        }
 
-                        // Ball out of bounds or fell through - end quickly
-                        if (Math.abs(bPos.z) > 12 || bPos.y < -0.5) {
-                            endRound();
+                            // Ball out of bounds or fell through - end quickly
+                            if (Math.abs(bPos.z) > 12 || bPos.y < -0.5) {
+                                endRound();
+                            }
                         }
-                    }
-                });
+                    });
 
-                console.log('[PocketPickleball] Game setup complete');
+                    console.log('[PocketPickleball] Game setup complete');
 
                 } catch (err) {
                     console.error('[PocketPickleball] Init error:', err);
