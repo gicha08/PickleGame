@@ -104,18 +104,18 @@
     <div id="ui">
         <div id="score-board" class="glass">
             <div class="score-unit">
-                <div class="score-label">Player</div>
-                <div id="player-score">0</div>
+                <div class="score-label">Good Drops</div>
+                <div id="good-score">0</div>
             </div>
             <div style="width: 1px; background: rgba(255,255,255,0.2);"></div>
             <div class="score-unit">
-                <div class="score-label">Opponent</div>
-                <div id="opponent-score">0</div>
+                <div class="score-label">Misses</div>
+                <div id="miss-score">0</div>
             </div>
         </div>
 
         <div id="message">Loading...</div>
-        <div id="hint" class="glass">Swipe SLOW for Drop, FAST for Smash!</div>
+        <div id="hint" class="glass">Swipe SLOW to drop it just over the net!</div>
     </div>
 
     <script>
@@ -443,10 +443,14 @@
                 app.root.addChild(paddle);
 
                 // --- Logic & State ---
-                let gameState = 'IDLE';
-                let playerScore = 0, opponentScore = 0;
+                let gameState = 'IDLE'; // IDLE, SERVE, PLAY, RETURN
+                let goodDrops = 0, misses = 0;
                 let lastMouseY = 0;
                 let lastPaddlePos = new pc.Vec3();
+                let playerHasHit = false; // track if player has returned the ball
+                const OPP_KITCHEN_Z = -2.13;
+                const OPP_SPEED = 4; // opponent lateral movement speed
+                let oppTargetX = 0;
 
                 // UI Helpers
                 const msgEl = document.getElementById('message');
@@ -454,6 +458,10 @@
                     msgEl.innerText = txt;
                     msgEl.classList.add('show');
                     setTimeout(() => msgEl.classList.remove('show'), 1000);
+                };
+                const updateScoreUI = () => {
+                    document.getElementById('good-score').innerText = goodDrops;
+                    document.getElementById('miss-score').innerText = misses;
                 };
                 showMsg('READY?');
 
@@ -463,12 +471,14 @@
                     ball.rigidbody.linearVelocity = pc.Vec3.ZERO;
                     ball.rigidbody.angularVelocity = pc.Vec3.ZERO;
                     ball.enabled = false;
+                    playerHasHit = false;
                 };
 
                 const serve = () => {
                     gameState = 'PLAY';
+                    playerHasHit = false;
                     ball.enabled = true;
-                    // Serve from opponent at kitchen line (z = -2.13)
+                    // Serve from opponent at kitchen line
                     const oppPos = opponent.getPosition();
                     const sx = oppPos.x + (Math.random() - 0.5) * 0.5;
                     ball.rigidbody.teleport(sx, 1.3, oppPos.z);
@@ -481,6 +491,18 @@
 
                     ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
                     document.getElementById('hint').style.opacity = 0;
+                };
+
+                // Opponent smash - sends ball back hard
+                const opponentSmash = () => {
+                    gameState = 'RETURN';
+                    ball.rigidbody.activate();
+                    const vz = 8 + Math.random() * 4;
+                    const vy = 2 + Math.random() * 2;
+                    const vx = (Math.random() - 0.5) * 4;
+                    ball.rigidbody.linearVelocity = new pc.Vec3(vx, vy, vz);
+                    ball.rigidbody.angularVelocity = new pc.Vec3(-15, 0, 0);
+                    showMsg('SMASHED!');
                 };
 
                 // Paddle Control
@@ -520,6 +542,7 @@
 
                     // Check Hit Zone
                     if (canHit(ballPos)) {
+                        playerHasHit = true;
                         const dt = (performance.now() - swipeStartTime) / 1000;
                         const dx = e.clientX - swipeStartPos.x;
                         const dy = swipeStartPos.y - e.clientY; // Up is positive
@@ -528,36 +551,25 @@
                         const dist = Math.sqrt(dx * dx + dy * dy);
                         const speed = dist / Math.max(dt, 0.01);
 
-                        // Determine Shot
-                        // Thresholds: Slow < 500, Fast > 1500
-                        const intensity = Math.min(1, Math.max(0, (speed - 200) / 2000));
+                        // Swipe speed determines shot arc
+                        // Slow swipe = low soft drop, fast swipe = high powerful shot
+                        const intensity = Math.min(1, Math.max(0, (speed - 100) / 1500));
 
-                        let speedZ, speedY;
-
-                        if (intensity < 0.25) {
-                            // Drop
-                            speedZ = 5 + intensity * 8; // 5 to 7
-                            speedY = 4 + intensity * 2;
-                            showMsg('DROP');
-                        } else {
-                            // Drive / Smash
-                            speedZ = 9 + intensity * 15; // 9 to 24
-                            speedY = 3 + intensity * 4;
-                            showMsg('SMASH!');
-                        }
+                        // Low intensity = gentle drop just over net
+                        // High intensity = too high, opponent will smash
+                        const speedZ = 4 + intensity * 14;
+                        const speedY = 1.5 + intensity * 6;
 
                         // Steering based on swipe X direction
-                        const steerX = dx / window.innerWidth * 15;
+                        const steerX = dx / window.innerWidth * 10;
 
-                        // Launch
+                        ball.rigidbody.activate();
                         ball.rigidbody.linearVelocity = new pc.Vec3(
                             steerX,
                             Math.min(speedY, 8),
-                            -Math.min(speedZ, 22)
+                            -Math.min(speedZ, 20)
                         );
-
-                        // Add some top spin based on intensity
-                        ball.rigidbody.angularVelocity = new pc.Vec3(intensity * 20, 0, 0);
+                        ball.rigidbody.angularVelocity = new pc.Vec3(intensity * 15, 0, 0);
                     }
                 });
 
@@ -606,34 +618,95 @@
 
                 // Game Loop Logic
                 console.log('[PocketPickleball] Setting up game loop...');
-                app.on('update', (dt) => {
-                    if (gameState === 'PLAY' && ball.enabled) {
-                        const bPos = ball.getPosition();
+                const KITCHEN_Z = -2.13;
+                const OPP_REACH_HEIGHT = 1.4; // ball height opponent can reach to smash
 
-                        // Ball growing effect
-                        // Z range: -7 to 7
+                app.on('update', (dt) => {
+                    const bPos = ball.getPosition();
+                    const bVel = ball.rigidbody.linearVelocity;
+
+                    // --- Opponent AI: track ball laterally ---
+                    if (ball.enabled) {
+                        // Target the ball's x when it's heading toward opponent
+                        if (bVel.z < 0) {
+                            oppTargetX = bPos.x;
+                        }
+                        const oppPos = opponent.getPosition();
+                        const dx = oppTargetX - oppPos.x;
+                        const moveX = Math.sign(dx) * Math.min(Math.abs(dx), OPP_SPEED * dt);
+                        opponent.setPosition(
+                            pc.math.clamp(oppPos.x + moveX, -COURT_W / 2 + 0.3, COURT_W / 2 - 0.3),
+                            0,
+                            OPP_KITCHEN_Z
+                        );
+                    }
+
+                    if ((gameState === 'PLAY' || gameState === 'RETURN') && ball.enabled) {
+                        // Ball growing effect (perspective)
                         const scale = 1 + pc.math.clamp((bPos.z + 7) / 14, 0, 1) * 0.8;
                         ball.setLocalScale(BALL_R * 2 * scale, BALL_R * 2 * scale, BALL_R * 2 * scale);
 
-                        // Scoring / Out Bounds
-                        if (Math.abs(bPos.z) > 15 || bPos.y < -0.2) {
-                            if (bPos.z > 0) {
-                                opponentScore++;
-                                showMsg('OPPONENT POINT');
-                            } else {
-                                playerScore++;
-                                showMsg('PLAYER POINT');
+                        // --- Shot categorization (only after player has hit) ---
+                        if (playerHasHit && gameState === 'PLAY') {
+
+                            // TOO HIGH: ball enters opponent zone above reach height
+                            // Opponent intercepts and smashes back
+                            if (bPos.z < KITCHEN_Z && bPos.y > OPP_REACH_HEIGHT) {
+                                // Too high - opponent smashes it
+                                misses++;
+                                updateScoreUI();
+                                showMsg('TOO HIGH!');
+                                opponentSmash();
+                                playerHasHit = false;
+                                return;
                             }
 
-                            // Update Score UI
-                            document.getElementById('player-score').innerText = playerScore;
-                            document.getElementById('opponent-score').innerText = opponentScore;
+                            // Ball at net height check - SHORT (hit the net)
+                            // Net collision handles this physically, but also check
+                            // if ball bounces back to player side
+                            if (bPos.z > 0.5 && bVel.z > 0 && playerHasHit) {
+                                // Ball bouncing back toward player = SHORT
+                                misses++;
+                                updateScoreUI();
+                                showMsg('SHORT!');
+                                gameState = 'IDLE';
+                                resetBall();
+                                setTimeout(() => { if (gameState === 'IDLE') serve(); }, 2000);
+                                return;
+                            }
 
+                            // GOOD DROP: ball lands in kitchen zone (between net and kitchen line)
+                            if (bPos.z < 0 && bPos.z > KITCHEN_Z && bPos.y < 0.15) {
+                                // Ball is low in the kitchen = good drop!
+                                goodDrops++;
+                                updateScoreUI();
+                                showMsg('GOOD DROP!');
+                                gameState = 'IDLE';
+                                resetBall();
+                                setTimeout(() => { if (gameState === 'IDLE') serve(); }, 2000);
+                                return;
+                            }
+
+                            // Ball lands past kitchen line but low = opponent reaches it
+                            if (bPos.z < KITCHEN_Z && bPos.y < OPP_REACH_HEIGHT && bPos.y > -0.1) {
+                                // Opponent can reach this - smash back
+                                misses++;
+                                updateScoreUI();
+                                showMsg('TOO HIGH!');
+                                opponentSmash();
+                                playerHasHit = false;
+                                return;
+                            }
+                        }
+
+                        // Ball out of bounds or fell through
+                        if (Math.abs(bPos.z) > 15 || bPos.y < -1) {
+                            if (gameState === 'RETURN') {
+                                // Opponent's smash went out - doesn't count
+                            }
                             gameState = 'IDLE';
                             resetBall();
-                            setTimeout(() => {
-                                if (gameState === 'IDLE') serve();
-                            }, 2000);
+                            setTimeout(() => { if (gameState === 'IDLE') serve(); }, 2000);
                         }
                     }
                 });
