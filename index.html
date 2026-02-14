@@ -189,6 +189,7 @@
             new THREE.MeshStandardMaterial({ color: 0x24628a, roughness: 0.9 })
         );
         courtSurface.rotation.x = -Math.PI / 2;
+        courtSurface.position.y = 0.005; // Slightly raised to prevent z-fighting with floor
         courtSurface.receiveShadow = true;
         courtGroup.add(courtSurface);
 
@@ -199,7 +200,7 @@
             const l = new THREE.Mesh(new THREE.PlaneGeometry(w, h), lineMat);
             l.rotation.x = -Math.PI / 2;
             l.rotation.z = rot;
-            l.position.set(x, 0.015, z); // Raised to prevent z-fighting
+            l.position.set(x, 0.02, z); // Raised further to clear court surface
             courtGroup.add(l);
         };
         addLine(COURT_W, 0.05, 0, COURT_L / 2);     // Baseline near
