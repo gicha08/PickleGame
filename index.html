@@ -325,14 +325,15 @@
                     const oppSprite = new pc.Entity('OpponentSprite');
                     oppSprite.addComponent('render', { type: 'plane' });
                     oppSprite.setLocalScale(1.2, 1.8, 1); // Width x Height for player figure
-                    oppSprite.setLocalEulerAngles(0, 0, 0); // Facing forward
+                    oppSprite.setLocalEulerAngles(90, 0, 0); // Rotate to stand upright and face camera
 
                     // Create a simple gradient material as placeholder
                     // You can replace this with an actual image texture
                     const oppMaterial = new pc.StandardMaterial();
                     oppMaterial.diffuse = new pc.Color(0.3, 0.5, 0.9); // Blue tint
-                    oppMaterial.emissive = new pc.Color(0.1, 0.2, 0.3);
+                    oppMaterial.emissive = new pc.Color(0.15, 0.25, 0.35); // Brighter emissive for visibility
                     oppMaterial.opacity = 1.0;
+                    oppMaterial.cull = pc.CULLFACE_NONE; // Double-sided so visible from both sides
                     oppMaterial.update();
                     oppSprite.render.material = oppMaterial;
 
