@@ -968,7 +968,7 @@
                                         ballHasBounced = true; // Mark as processed for this round
                                         const h = bPos.y; // Height at the moment of categorization
 
-                                        if (h < 1.0) {
+                                        if (h < 0.8) {
                                             goodDrops++;
                                             showMsg('GOOD DROP!', 'good');
                                         } else if (h < 1.4) {
