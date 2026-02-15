@@ -95,7 +95,7 @@ body {
 }
 
 #message {
-    font-size: 64px;
+    font-size: clamp(32px, 8vw, 64px);
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 4px;
@@ -106,6 +106,14 @@ body {
     text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
     z-index: 1000;
     margin-top: -50px;
+    text-align: right;
+}
+
+@media (min-width: 768px) {
+    #message {
+        text-align: center;
+        margin-left: 40px;
+    }
 }
 
 #message.good {
@@ -232,6 +240,15 @@ body {
 
 .side-btn.settings-btn {
     color: #00e5ff;
+}
+
+#silent-hint {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: right;
+    line-height: 1.4;
+    max-width: 80px;
+    margin-top: -5px;
 }
 
 .side-btn[data-state="paused"] .pause-icon {
