@@ -538,23 +538,32 @@ window.settingsManager = settingsManager;
             let isSwiping = false;
             let swipeStart = { x: 0, y: 0, t: 0 };
 
-            window.addEventListener('pointerdown', (e) => {
-                if (e.target.closest('.side-btn') || e.target.closest('.modal-content')) return;
+            // Normalize touch/mouse/pointer events to {clientX, clientY, target}
+            const getXY = (e) => {
+                if (e.touches && e.touches.length > 0) return e.touches[0];
+                if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0];
+                return e;
+            };
+
+            const onDown = (e) => {
+                const pt = getXY(e);
+                if (pt.target && pt.target.closest && (pt.target.closest('.side-btn') || pt.target.closest('.modal-content'))) return;
                 audioManager.init(); paddle.enabled = true;
                 if (gameState === 'IDLE') serve();
                 else if (gameState === 'PLAY') {
                     isSwiping = true;
-                    swipeStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+                    swipeStart = { x: pt.clientX, y: pt.clientY, t: performance.now() };
                 }
-            });
+            };
 
-            window.addEventListener('pointerup', (e) => {
+            const onUp = (e) => {
+                const pt = getXY(e);
                 paddle.enabled = false;
                 if (!isSwiping || gameState !== 'PLAY') return;
                 isSwiping = false;
                 const dt = (performance.now() - swipeStart.t) / 1000;
-                const dx = e.clientX - swipeStart.x;
-                const dy = swipeStart.y - e.clientY;
+                const dx = pt.clientX - swipeStart.x;
+                const dy = swipeStart.y - pt.clientY;
                 const bPos = ball.getPosition();
                 if (bPos.z > 0 && bPos.y > -0.5) {
                     playerHasHit = true; audioManager.playImpact();
@@ -564,12 +573,13 @@ window.settingsManager = settingsManager;
                     ball.rigidbody.activate();
                     ball.rigidbody.linearVelocity = new pc.Vec3(dx / window.innerWidth * 6, Math.min(4 + intensity * 6, 10), -Math.min(6 + intensity * 8, 15));
                 }
-            });
+            };
 
-            window.addEventListener('pointermove', (e) => {
+            const onMove = (e) => {
+                const pt = getXY(e);
                 const start = new pc.Vec3(), end = new pc.Vec3();
-                camera.camera.screenToWorld(e.clientX, e.clientY, 0.1, start);
-                camera.camera.screenToWorld(e.clientX, e.clientY, 100, end);
+                camera.camera.screenToWorld(pt.clientX, pt.clientY, 0.1, start);
+                camera.camera.screenToWorld(pt.clientX, pt.clientY, 100, end);
                 const rayDir = end.sub(start).normalize();
                 const t = (6.5 - start.z) / rayDir.z;
                 if (t > 0) {
@@ -577,7 +587,22 @@ window.settingsManager = settingsManager;
                     paddle.rigidbody.teleport(pc.math.clamp(hit.x, -3.5, 3.5), pc.math.clamp(hit.y, 0.2, 2.5), 6.5);
                     paddle.setLocalEulerAngles(-10 + hit.y * 5, hit.x * 10, 0);
                 }
-            });
+            };
+
+            // Pointer events (Chrome, modern browsers)
+            if (window.PointerEvent) {
+                window.addEventListener('pointerdown', onDown);
+                window.addEventListener('pointerup', onUp);
+                window.addEventListener('pointermove', onMove);
+            } else {
+                // Fallback: touch + mouse (Safari, older browsers)
+                window.addEventListener('touchstart', onDown);
+                window.addEventListener('touchend', onUp);
+                window.addEventListener('touchmove', onMove);
+                window.addEventListener('mousedown', onDown);
+                window.addEventListener('mouseup', onUp);
+                window.addEventListener('mousemove', onMove);
+            }
 
             const endRound = () => {
                 gameState = 'IDLE'; resetBall();
