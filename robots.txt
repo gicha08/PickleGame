@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://gicha08.github.io/PickleGame/sitemap.xml

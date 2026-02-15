@@ -11,6 +11,11 @@
     <meta property="og:image" content="https://gicha08.github.io/PickleGame/assets/Dropshots.png?v=2">
     <meta property="og:url" content="https://gicha08.github.io/PickleGame/DropshotPractice.html">
     <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Dropshot Practice | PickleGames">
+    <meta name="twitter:description" content="Practice dropping the ball softly into the kitchen. Interactive 3D pickleball drill.">
+    <meta name="twitter:image" content="https://gicha08.github.io/PickleGame/assets/Dropshots.png?v=2">
+    <link rel="canonical" href="https://gicha08.github.io/PickleGame/DropshotPractice.html">
     <link rel="icon" type="image/svg+xml" href="logo.svg">
 
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
@@ -46,7 +51,7 @@
         </div>
 
         <div id="side-controls">
-            <button id="toggle-pause-btn" class="side-btn" data-tooltip="Pause/Resume" data-state="playing"
+            <button id="toggle-pause-btn" class="side-btn" aria-label="Pause or Resume" data-tooltip="Pause/Resume" data-state="playing"
                 onclick="togglePause()">
                 <svg class="pause-icon" viewBox="0 0 24 24">
                     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
@@ -55,14 +60,14 @@
                     <path d="M8 5v14l11-7z" />
                 </svg>
             </button>
-            <button class="side-btn restart-btn" data-tooltip="Restart Game" onclick="restartGame()">
+            <button class="side-btn restart-btn" aria-label="Restart Game" data-tooltip="Restart Game" onclick="restartGame()">
                 <svg viewBox="0 0 24 24">
                     <path
                         d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
                 </svg>
             </button>
             <!-- Audio Settings Button -->
-            <button class="side-btn settings-btn" data-tooltip="Audio Setting"
+            <button class="side-btn settings-btn" aria-label="Audio Settings" data-tooltip="Audio Setting"
                 onclick="settingsManager.toggleModal(true)">
                 <svg viewBox="0 0 24 24">
                     <path
