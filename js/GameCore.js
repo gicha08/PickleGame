@@ -65,29 +65,38 @@ class AudioManager {
     }
 
     init() {
-        if (this.ctx && this.ctx.state !== 'suspended') return;
+        if (this.ctx && this.ctx.state === 'running') return;
 
-        try {
+        const resume = () => {
             if (!this.ctx) {
                 this.ctx = new (window.AudioContext || window.webkitAudioContext)();
                 this.preloadAll();
             }
-
-            // Critical for Mobile: The context must be resumed inside a user interaction
-            if (this.ctx.state === 'suspended') {
-                this.ctx.resume();
+            if (this.ctx.state !== 'running') {
+                this.ctx.resume().then(() => {
+                    console.log('[AudioManager] Audio state:', this.ctx.state);
+                    // Play a tiny bit of silence to officially "unlock"
+                    const buf = this.ctx.createBuffer(1, 1, 22050);
+                    const src = this.ctx.createBufferSource();
+                    src.buffer = buf;
+                    src.connect(this.ctx.destination);
+                    src.start(0);
+                });
             }
+        };
 
-            // iOS/Safari "Unlock" Trick: Play a tiny bit of silence
-            const buffer = this.ctx.createBuffer(1, 1, 22050);
-            const source = this.ctx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(this.ctx.destination);
-            source.start(0);
+        resume();
 
-            console.log('[AudioManager] Audio unlocked/initialized. State:', this.ctx.state);
-        } catch (e) {
-            console.error("AudioContext failed to initialize", e);
+        // Mobile browsers often require a 'click' or 'touchstart' specifically
+        if (!window._audioUnlocked) {
+            const unlock = () => {
+                resume();
+                window._audioUnlocked = true;
+                window.removeEventListener('touchstart', unlock);
+                window.removeEventListener('click', unlock);
+            };
+            window.addEventListener('touchstart', unlock, { passive: false });
+            window.addEventListener('click', unlock, { passive: false });
         }
     }
 
