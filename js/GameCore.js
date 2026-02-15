@@ -18,7 +18,8 @@ class AudioManager {
                 'Excellent_Aaron(en_US).mp3',
                 'Good_Aaron(en_US).mp3',
                 'Excellent_Bubble(en_US).mp3',
-                'Excellent_Zarvox(en_US).mp3'
+                'Excellent_Zarvox(en_US).mp3',
+                'WhoAreYou.mp3'
             ],
             'voice_fair': [
                 'ItWorks_Aaron(en_US).mp3',
@@ -29,10 +30,14 @@ class AudioManager {
             'voice_short': [
                 'TooWeak_Bubble(en_US).mp3',
                 'ItsTooWeak_Aaron(en_US).mp3',
-                'ItsTooShort_Aaron(en_US).mp3'
+                'ItsTooShort_Aaron(en_US).mp3',
+                'Bruh.mp3'
             ],
             'voice_smash': [
-                'BOOM_Daniel(en_UK).mp3'
+                'BOOM_Daniel(en_UK).mp3',
+                'GotYouHa.mp3',
+                'YaHo.mp3',
+                'YeahHuHump3.mp3'
             ],
             'grunt_male': [
                 'Grunt_male(1).mp3',
