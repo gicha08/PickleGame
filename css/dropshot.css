@@ -243,12 +243,25 @@ body {
 }
 
 #silent-hint {
+    display: none;
     font-size: 16px;
     color: #FFA726;
     text-align: right;
     line-height: 1.4;
     max-width: 90px;
     margin-top: -5px;
+    transition: opacity 0.3s;
+}
+
+@media (max-width: 767px) {
+    #silent-hint {
+        display: block;
+    }
+}
+
+#silent-hint.hidden {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .side-btn[data-state="paused"] .pause-icon {

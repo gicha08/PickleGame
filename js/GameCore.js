@@ -488,6 +488,7 @@ window.settingsManager = settingsManager;
             let goodDrops = 0, fairDrops = 0, shortBalls = 0, highBalls = 0;
             let oppTargetX = 0; let smashSize = 1.0;
             const msgEl = document.getElementById('message');
+            const silentHint = document.getElementById('silent-hint');
             const showMsg = (txt, type = '', stay = false) => {
                 if (!msgEl) return;
                 msgEl.innerText = txt; msgEl.className = type; msgEl.offsetHeight; msgEl.classList.add('show');
@@ -506,6 +507,7 @@ window.settingsManager = settingsManager;
             };
             const serve = () => {
                 if (msgEl) msgEl.classList.remove('show');
+                if (silentHint) silentHint.classList.add('hidden');
                 gameState = 'PLAY'; playerHasHit = false; ball.enabled = true;
                 opponent.setPosition(0, 0, -2.13); oppTargetX = 0;
                 ball.rigidbody.teleport(0, 1.3, -2.13); ball.rigidbody.activate();
@@ -526,7 +528,9 @@ window.settingsManager = settingsManager;
             };
             window.togglePause = () => {
                 app.timeScale = app.timeScale === 1 ? 0 : 1;
-                document.getElementById('toggle-pause-btn').setAttribute('data-state', app.timeScale === 0 ? 'paused' : 'playing');
+                const paused = app.timeScale === 0;
+                document.getElementById('toggle-pause-btn').setAttribute('data-state', paused ? 'paused' : 'playing');
+                if (silentHint) silentHint.classList.toggle('hidden', !paused);
             };
             window.restartGame = () => {
                 goodDrops = 0; fairDrops = 0; shortBalls = 0; highBalls = 0; updateUI();
