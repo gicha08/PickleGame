@@ -216,7 +216,7 @@ class SettingsManager {
             <div id="settings-modal" class="modal-overlay">
                 <div class="modal-content glass">
                     <div class="modal-header">
-                        <h2>Settings</h2>
+                        <h2>Audio Setting</h2>
                         <button class="close-btn" onclick="settingsManager.toggleModal(false)">&times;</button>
                     </div>
                     
