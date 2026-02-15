@@ -4,9 +4,10 @@
 class AudioManager {
     constructor() {
         this.ctx = null;
-        this.masterVolume = 0.5;
+        this.masterVolume = 1.0; // Boosted for mobile
         this.enabled = true;
-        this.buffers = {}; // Store loaded audio file buffers
+        this.buffers = {};
+        this._unlocked = false;
 
         // Define Audio Pools based on actual files in assets/sounds/
         this.pools = {
@@ -65,39 +66,30 @@ class AudioManager {
     }
 
     init() {
-        if (this.ctx && this.ctx.state === 'running') return;
+        if (this._unlocked && this.ctx && this.ctx.state === 'running') return;
 
-        const resume = () => {
+        const unlock = () => {
             if (!this.ctx) {
                 this.ctx = new (window.AudioContext || window.webkitAudioContext)();
                 this.preloadAll();
             }
-            if (this.ctx.state !== 'running') {
-                this.ctx.resume().then(() => {
-                    console.log('[AudioManager] Audio state:', this.ctx.state);
-                    // Play a tiny bit of silence to officially "unlock"
-                    const buf = this.ctx.createBuffer(1, 1, 22050);
-                    const src = this.ctx.createBufferSource();
-                    src.buffer = buf;
-                    src.connect(this.ctx.destination);
-                    src.start(0);
-                });
-            }
+            this.ctx.resume().then(() => {
+                if (this.ctx.state === 'running') {
+                    console.log('[AudioManager] UNLOCKED');
+                    this._unlocked = true;
+                    // Play a tiny beep to confirm
+                    this.playTone(1000, 'sine', 0.01, 0.1);
+                    window.removeEventListener('touchend', unlock);
+                    window.removeEventListener('click', unlock);
+                    window.removeEventListener('touchstart', unlock);
+                }
+            });
         };
 
-        resume();
-
-        // Mobile browsers often require a 'click' or 'touchstart' specifically
-        if (!window._audioUnlocked) {
-            const unlock = () => {
-                resume();
-                window._audioUnlocked = true;
-                window.removeEventListener('touchstart', unlock);
-                window.removeEventListener('click', unlock);
-            };
-            window.addEventListener('touchstart', unlock, { passive: false });
-            window.addEventListener('click', unlock, { passive: false });
-        }
+        window.addEventListener('touchend', unlock, false);
+        window.addEventListener('touchstart', unlock, false);
+        window.addEventListener('click', unlock, false);
+        unlock(); // Try immediate
     }
 
     async preloadAll() {
@@ -114,31 +106,29 @@ class AudioManager {
         if (this.buffers[url]) return this.buffers[url];
         try {
             const response = await fetch(url);
-            if (!response.ok) return null; // File might not exist yet
+            if (!response.ok) return null;
             const arrayBuffer = await response.arrayBuffer();
             const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
             this.buffers[url] = audioBuffer;
             return audioBuffer;
-        } catch (e) {
-            // Silently fail if file isn't found - user might still be generating them
-            return null;
-        }
+        } catch (e) { return null; }
     }
 
     playBuffer(buffer, volume = 0.5) {
         if (!this.enabled || !this.ctx || !buffer) return;
-        this.ctx.resume();
+        if (this.ctx.state !== 'running') this.ctx.resume();
         const source = this.ctx.createBufferSource();
         source.buffer = buffer;
         const gain = this.ctx.createGain();
         gain.gain.setValueAtTime(volume * this.masterVolume, this.ctx.currentTime);
         source.connect(gain);
         gain.connect(this.ctx.destination);
-        source.start();
+        source.start(0);
     }
 
     playRandom(poolName, volume = 0.5) {
         if (!this.enabled || !this.ctx) return;
+        if (this.ctx.state !== 'running') this.ctx.resume();
         const pool = this.pools[poolName];
         if (!pool) return;
 
@@ -148,9 +138,7 @@ class AudioManager {
         if (this.buffers[url]) {
             this.playBuffer(this.buffers[url], volume);
         } else {
-            // Try fallback to legacy beep if file not loaded
             this.playFallbackBeep(poolName);
-            // Attempt to load for next time
             this.loadSound(url);
         }
     }
