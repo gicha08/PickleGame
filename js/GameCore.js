@@ -65,11 +65,30 @@ class AudioManager {
     }
 
     init() {
-        if (this.ctx) return;
+        if (this.ctx && this.ctx.state !== 'suspended') return;
+
         try {
-            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-            this.preloadAll();
-        } catch (e) { console.error("AudioContext failed", e); }
+            if (!this.ctx) {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.preloadAll();
+            }
+
+            // Critical for Mobile: The context must be resumed inside a user interaction
+            if (this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+
+            // iOS/Safari "Unlock" Trick: Play a tiny bit of silence
+            const buffer = this.ctx.createBuffer(1, 1, 22050);
+            const source = this.ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(this.ctx.destination);
+            source.start(0);
+
+            console.log('[AudioManager] Audio unlocked/initialized. State:', this.ctx.state);
+        } catch (e) {
+            console.error("AudioContext failed to initialize", e);
+        }
     }
 
     async preloadAll() {
