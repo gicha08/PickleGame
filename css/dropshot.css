@@ -243,11 +243,11 @@ body {
 }
 
 #silent-hint {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
+    font-size: 16px;
+    color: #FFA726;
     text-align: right;
     line-height: 1.4;
-    max-width: 80px;
+    max-width: 90px;
     margin-top: -5px;
 }
 
