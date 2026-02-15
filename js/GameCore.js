@@ -315,12 +315,39 @@ class SettingsManager {
 const settingsManager = new SettingsManager();
 window.settingsManager = settingsManager;
 
+// --- On-Screen Debug (remove after debugging) ---
+const _dbg = (() => {
+    const el = document.createElement('div');
+    Object.assign(el.style, {
+        position: 'fixed', top: '0', left: '0', right: '0',
+        maxHeight: '35vh', overflow: 'auto', background: 'rgba(0,0,0,0.9)',
+        color: '#0f0', fontSize: '11px', fontFamily: 'monospace',
+        padding: '6px', zIndex: '99999', pointerEvents: 'none'
+    });
+    document.body.appendChild(el);
+    return (msg) => {
+        const d = document.createElement('div');
+        d.textContent = msg;
+        el.appendChild(d);
+        el.scrollTop = el.scrollHeight;
+    };
+})();
+window.onerror = (m, s, l, c, e) => _dbg('ERROR: ' + m + ' (' + s + ':' + l + ')');
+window.addEventListener('unhandledrejection', (e) => _dbg('REJECT: ' + e.reason));
+
 // --- GameCore ---
 (function () {
+    _dbg('pc defined: ' + (typeof pc !== 'undefined'));
+    _dbg('Ammo defined: ' + (typeof Ammo !== 'undefined') + ', type: ' + typeof Ammo);
+
     const startApp = () => {
+        _dbg('startApp() called');
         if (typeof Ammo === 'function') {
-            Ammo().then((instance) => { window.Ammo = instance; initGame(); });
+            _dbg('Calling Ammo()...');
+            Ammo().then((instance) => { window.Ammo = instance; _dbg('Ammo initialized OK'); initGame(); })
+                  .catch(e => _dbg('Ammo() FAILED: ' + e));
         } else {
+            _dbg('Ammo not a function, skipping physics init');
             initGame();
         }
     };
@@ -328,6 +355,7 @@ window.settingsManager = settingsManager;
     if (typeof Ammo !== 'undefined') {
         startApp();
     } else {
+        _dbg('Ammo not loaded yet, waiting...');
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
             setTimeout(startApp, 10);
         } else {
@@ -336,6 +364,8 @@ window.settingsManager = settingsManager;
     }
 
     function initGame() {
+        _dbg('initGame() called');
+        _dbg('WebGL support: ' + !!document.createElement('canvas').getContext('webgl2') + ' (v2) / ' + !!document.createElement('canvas').getContext('webgl') + ' (v1)');
         try {
             if (typeof Ammo !== 'undefined' && Ammo.btRigidBody && Ammo.btRigidBody.prototype && !Ammo.btRigidBody.prototype.setRollingFriction) {
                 Ammo.btRigidBody.prototype.setRollingFriction = function () { };
