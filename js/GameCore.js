@@ -31,7 +31,8 @@ class AudioManager {
                 'TooWeak_Bubble(en_US).mp3',
                 'ItsTooWeak_Aaron(en_US).mp3',
                 'ItsTooShort_Aaron(en_US).mp3',
-                'Bruh.mp3'
+                'Bruh.mp3',
+                'Harder_female.mp3'
             ],
             'voice_smash': [
                 'BOOM_Daniel(en_UK).mp3',
